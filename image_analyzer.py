@@ -276,7 +276,18 @@ class ImageAnalyzer:
                     if isinstance(value, str):
                         structure_parts.append(f"{key}: {value}")
                     elif isinstance(value, list):
-                        structure_parts.append(f"{key}: {', '.join(value)}")
+                        # 处理列表中的字典或字符串
+                        list_items = []
+                        for item in value:
+                            if isinstance(item, dict):
+                                # 如果是字典，提取关键信息
+                                if 'component' in item and 'connection' in item:
+                                    list_items.append(f"{item['component']}: {item['connection']}")
+                                else:
+                                    list_items.append(str(item))
+                            else:
+                                list_items.append(str(item))
+                        structure_parts.append(f"{key}: {', '.join(list_items)}")
                 structure = "; ".join(structure_parts)
             
             # 提取状态评估
@@ -286,6 +297,19 @@ class ImageAnalyzer:
                 for key, value in data['status'].items():
                     if isinstance(value, str):
                         status_parts.append(f"{key}: {value}")
+                    elif isinstance(value, list):
+                        # 处理列表中的字典或字符串
+                        list_items = []
+                        for item in value:
+                            if isinstance(item, dict):
+                                # 如果是字典，提取关键信息
+                                if 'location' in item and 'description' in item:
+                                    list_items.append(f"{item['location']}: {item['description']}")
+                                else:
+                                    list_items.append(str(item))
+                            else:
+                                list_items.append(str(item))
+                        status_parts.append(f"{key}: {', '.join(list_items)}")
                 status = "; ".join(status_parts)
             
             # 提取尺寸信息
@@ -329,6 +353,7 @@ class ImageAnalyzer:
             
         except Exception as e:
             logger.warning(f"AI数据转换失败: {str(e)}")
+            logger.warning(f"原始数据: {data}")
             return self._get_default_analysis()
     
     def _map_material_type(self, material: str) -> str:

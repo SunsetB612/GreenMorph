@@ -20,7 +20,6 @@ from image_analyzer import ImageAnalyzer
 from multimodal_api import MultimodalAPI
 from image_generator import ImageGenerator
 from step_visualizer import StepVisualizer
-from file_manager import FileManager
 from config import settings
 
 
@@ -32,7 +31,6 @@ class RedesignService:
         self.multimodal_api = MultimodalAPI()
         self.image_generator = ImageGenerator()
         self.step_visualizer = StepVisualizer()
-        self.file_manager = FileManager()
         
         logger.info("GreenMorph 服务初始化完成")
     
