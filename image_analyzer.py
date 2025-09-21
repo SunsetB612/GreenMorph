@@ -7,8 +7,6 @@ import base64
 import io
 from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image
-import cv2
-import numpy as np
 from loguru import logger
 
 from models import ImageAnalysisResponse, MaterialType
@@ -45,14 +43,21 @@ class ImageAnalyzer:
             result = ImageAnalysisResponse(
                 main_objects=ai_analysis.get('objects', []),
                 materials=ai_analysis.get('materials', []),
-                colors=basic_info['colors'],
+                colors=ai_analysis.get('colors', []),  # 从AI分析中获取颜色
                 condition=ai_analysis.get('condition', '未知'),
-                dimensions=basic_info['dimensions'],
+                dimensions=ai_analysis.get('dimensions', basic_info['dimensions']),  # 优先使用AI分析的尺寸
                 features=ai_analysis.get('features', []),
-                confidence=ai_analysis.get('confidence', 0.8)
+                confidence=ai_analysis.get('confidence', 0.8),
+                appearance=ai_analysis.get('appearance'),
+                structure=ai_analysis.get('structure'),
+                status=ai_analysis.get('status')
             )
             
             logger.info(f"图片分析完成，识别到 {len(result.main_objects)} 个主要物体")
+            logger.info(f"主要物体: {result.main_objects}")
+            logger.info(f"材料类型: {result.materials}")
+            logger.info(f"物品状态: {result.condition}")
+            logger.info(f"分析置信度: {result.confidence}")
             return result
             
         except Exception as e:
@@ -85,53 +90,11 @@ class ImageAnalyzer:
             'aspect_ratio': round(width / height, 2)
         }
         
-        # 提取主要颜色
-        colors = self._extract_dominant_colors(image)
-        
         return {
             'dimensions': dimensions,
-            'colors': colors
+            'colors': []  # 颜色信息由AI分析提供
         }
     
-    def _extract_dominant_colors(self, image: Image.Image, num_colors: int = 5) -> List[str]:
-        """提取主要颜色"""
-        try:
-            # 将图片转换为numpy数组
-            img_array = np.array(image)
-            
-            # 重塑数组为像素列表
-            pixels = img_array.reshape(-1, 3)
-            
-            # 使用K-means聚类提取主要颜色
-            from sklearn.cluster import KMeans
-            
-            kmeans = KMeans(n_clusters=num_colors, random_state=42, n_init=10)
-            kmeans.fit(pixels)
-            
-            # 获取聚类中心（主要颜色）
-            colors = kmeans.cluster_centers_.astype(int)
-            
-            # 转换为十六进制颜色代码
-            color_hex = [f"#{r:02x}{g:02x}{b:02x}" for r, g, b in colors]
-            
-            return color_hex
-            
-        except Exception as e:
-            logger.warning(f"颜色提取失败，使用默认方法: {str(e)}")
-            # 备用方法：简单采样
-            return self._simple_color_extraction(image, num_colors)
-    
-    def _simple_color_extraction(self, image: Image.Image, num_colors: int = 5) -> List[str]:
-        """简单的颜色提取方法"""
-        # 缩小图片以加快处理
-        small_image = image.resize((50, 50))
-        pixels = list(small_image.getdata())
-        
-        # 随机采样颜色
-        import random
-        sample_colors = random.sample(pixels, min(num_colors, len(pixels)))
-        
-        return [f"#{r:02x}{g:02x}{b:02x}" for r, g, b in sample_colors]
     
     async def _ai_analyze_image(self, image: Image.Image) -> Dict[str, Any]:
         """使用AI模型分析图片"""
@@ -162,36 +125,252 @@ class ImageAnalyzer:
     
     def _build_analysis_prompt(self) -> str:
         """构建图片分析提示词"""
-        return """
-        请详细分析这张旧物图片，提取以下信息：
-        
-        1. 主要物体：识别图片中的主要物体和家具类型
-        2. 材料类型：分析物体的主要材料（木材、金属、布料、玻璃、陶瓷、塑料、皮革、纸张等）
-        3. 物品状态：评估物品的磨损程度和整体状态
-        4. 关键特征：识别物体的独特特征、结构特点、装饰元素等
-        5. 改造潜力：评估物品的改造潜力和可能性
-        
-        请以JSON格式返回结果，包含以下字段：
-        - objects: 主要物体列表
-        - materials: 材料类型列表
-        - condition: 物品状态描述
-        - features: 关键特征列表
-        - confidence: 分析置信度(0-1)
-        """
+        return """请仔细分析这张图像中显示的旧物品，专注于提取物品的客观特征信息。
+
+请按照以下结构输出分析结果：
+
+**1. 物品类型识别**
+- 物品的具体类型（如椅子、桌子、柜子、架子等）
+- 物品的原始用途和功能
+- 物品的基本尺寸特征（大、中、小等）
+
+**2. 材质详细分析**
+- 主要材质类型（木头、金属、塑料、布料、玻璃等）
+- 材质的具体特征（如木材种类、金属类型、表面处理等）
+- 材质的磨损程度和保存状态
+- 材质的颜色和纹理特征
+
+**3. 结构特征描述**
+- 物品的整体结构（框架、支撑、连接方式等）
+- 关键结构部件（如抽屉、门板、支架、把手、装饰元素等）
+- 结构完整性和稳定性评估
+- 可拆卸或可调整的部件
+
+**4. 外观特征**
+- 物品的整体形状和轮廓
+- 装饰元素和设计细节
+- 表面处理方式（油漆、清漆、未处理等）
+- 颜色搭配和视觉特征
+
+**5. 物品状态评估**
+- 整体保存状态（良好/一般/较差）
+- 主要磨损部位和程度
+- 需要修复或处理的问题
+- 物品的清洁程度
+
+请确保分析客观、准确，专注于描述物品的现有特征，不要涉及改造建议。
+
+请以JSON格式返回结果，包含以下字段：
+- objects: 主要物体列表
+- materials: 材料类型列表
+- condition: 物品状态描述
+- features: 关键特征列表
+- confidence: 分析置信度(0-1)
+- dimensions: 尺寸信息
+- appearance: 外观特征描述
+- structure: 结构特征描述
+- status: 状态评估"""
     
     def _parse_ai_response(self, response: str) -> Dict[str, Any]:
         """解析AI响应"""
         try:
             import json
-            # 尝试解析JSON响应
+            import re
+            
+            # 尝试提取JSON代码块
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+                data = json.loads(json_str)
+                return self._convert_ai_data(data)
+            
+            # 尝试直接解析JSON
             if response.strip().startswith('{'):
-                return json.loads(response)
+                data = json.loads(response)
+                return self._convert_ai_data(data)
             else:
                 # 如果不是JSON格式，尝试提取信息
                 return self._extract_info_from_text(response)
         except Exception as e:
             logger.warning(f"AI响应解析失败: {str(e)}")
             return self._get_default_analysis()
+    
+    def _convert_ai_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """转换AI返回的数据格式"""
+        try:
+            # 提取主要物体
+            objects = []
+            if 'objects' in data and isinstance(data['objects'], list):
+                for obj in data['objects']:
+                    if isinstance(obj, dict) and 'type' in obj:
+                        objects.append(obj['type'])
+                    elif isinstance(obj, str):
+                        objects.append(obj)
+            
+            # 提取材料
+            materials = []
+            if 'materials' in data and isinstance(data['materials'], list):
+                for material in data['materials']:
+                    if isinstance(material, dict) and 'type' in material:
+                        material_type = self._map_material_type(material['type'])
+                        if material_type:
+                            materials.append(material_type)
+                    elif isinstance(material, str):
+                        material_type = self._map_material_type(material)
+                        if material_type:
+                            materials.append(material_type)
+            
+            # 提取颜色信息
+            colors = []
+            if 'colors' in data and isinstance(data['colors'], list):
+                for color in data['colors']:
+                    if isinstance(color, str):
+                        colors.append(color)
+                    elif isinstance(color, dict) and 'name' in color:
+                        colors.append(color['name'])
+            elif 'appearance' in data and isinstance(data['appearance'], dict):
+                # 从外观特征中提取颜色
+                color_info = data['appearance'].get('color', '')
+                if color_info and isinstance(color_info, str):
+                    colors.append(color_info)
+            
+            # 提取特征
+            features = []
+            if 'features' in data and isinstance(data['features'], list):
+                for feature in data['features']:
+                    if isinstance(feature, dict):
+                        # 如果是字典，提取name和description
+                        name = feature.get('name', '')
+                        desc = feature.get('description', '')
+                        if name and desc:
+                            features.append(f"{name}: {desc}")
+                        elif name:
+                            features.append(name)
+                        elif desc:
+                            features.append(desc)
+                    elif isinstance(feature, str):
+                        features.append(feature)
+            
+            # 提取状态信息
+            condition = "未知"
+            if 'condition' in data:
+                if isinstance(data['condition'], dict):
+                    condition = data['condition'].get('overall', '未知')
+                else:
+                    condition = str(data['condition'])
+            
+            # 提取外观特征
+            appearance = None
+            if 'appearance' in data and isinstance(data['appearance'], dict):
+                appearance_parts = []
+                for key, value in data['appearance'].items():
+                    if isinstance(value, str):
+                        appearance_parts.append(f"{key}: {value}")
+                appearance = "; ".join(appearance_parts)
+            
+            # 提取结构特征
+            structure = None
+            if 'structure' in data and isinstance(data['structure'], dict):
+                structure_parts = []
+                for key, value in data['structure'].items():
+                    if isinstance(value, str):
+                        structure_parts.append(f"{key}: {value}")
+                    elif isinstance(value, list):
+                        structure_parts.append(f"{key}: {', '.join(value)}")
+                structure = "; ".join(structure_parts)
+            
+            # 提取状态评估
+            status = None
+            if 'status' in data and isinstance(data['status'], dict):
+                status_parts = []
+                for key, value in data['status'].items():
+                    if isinstance(value, str):
+                        status_parts.append(f"{key}: {value}")
+                status = "; ".join(status_parts)
+            
+            # 提取尺寸信息
+            dimensions = None
+            if 'dimensions' in data and isinstance(data['dimensions'], dict):
+                dimensions = {}
+                for key, value in data['dimensions'].items():
+                    if isinstance(value, (int, float)):
+                        dimensions[key] = float(value)
+                    elif isinstance(value, str):
+                        # 尝试提取数字，处理"约80-90厘米"这样的格式
+                        import re
+                        numbers = re.findall(r'\d+\.?\d*', value)
+                        if numbers:
+                            dimensions[key] = float(numbers[0])
+                        else:
+                            dimensions[key] = 0.0
+            
+            # 处理置信度，确保是float类型
+            confidence = data.get('confidence', 0.8)
+            if isinstance(confidence, str):
+                try:
+                    confidence = float(confidence)
+                except ValueError:
+                    confidence = 0.8
+            elif not isinstance(confidence, (int, float)):
+                confidence = 0.8
+            
+            return {
+                'objects': objects,
+                'materials': materials,
+                'colors': colors,
+                'condition': condition,
+                'features': features,
+                'confidence': float(confidence),
+                'appearance': appearance,
+                'structure': structure,
+                'status': status,
+                'dimensions': dimensions
+            }
+            
+        except Exception as e:
+            logger.warning(f"AI数据转换失败: {str(e)}")
+            return self._get_default_analysis()
+    
+    def _map_material_type(self, material: str) -> str:
+        """将中文材料类型映射为英文枚举值"""
+        material_mapping = {
+            '木材': 'wood',
+            '木头': 'wood',
+            '木质': 'wood',
+            '金属': 'metal',
+            '铁': 'metal',
+            '钢': 'metal',
+            '布料': 'fabric',
+            '织物': 'fabric',
+            '玻璃': 'glass',
+            '陶瓷': 'ceramic',
+            '塑料': 'plastic',
+            '皮革': 'leather',
+            '纸张': 'paper',
+            '纸': 'paper',
+            '清漆': 'wood',  # 清漆通常用于木材表面
+            '油漆': 'wood',  # 油漆通常用于木材表面
+            'wood': 'wood',
+            'metal': 'metal',
+            'fabric': 'fabric',
+            'glass': 'glass',
+            'ceramic': 'ceramic',
+            'plastic': 'plastic',
+            'leather': 'leather',
+            'paper': 'paper'
+        }
+        
+        # 尝试直接匹配
+        if material.lower() in material_mapping:
+            return material_mapping[material.lower()]
+        
+        # 尝试部分匹配
+        for key, value in material_mapping.items():
+            if key in material or material in key:
+                return value
+        
+        # 默认返回 wood（木材）
+        return 'wood'
     
     def _extract_info_from_text(self, text: str) -> Dict[str, Any]:
         """从文本中提取信息"""
@@ -224,7 +403,10 @@ class ImageAnalyzer:
             'materials': materials,
             'condition': '需要进一步分析',
             'features': features,
-            'confidence': 0.6
+            'confidence': 0.6,
+            'appearance': '外观特征需要进一步分析',
+            'structure': '结构特征需要进一步分析',
+            'status': '状态评估需要进一步分析'
         }
     
     def _get_default_analysis(self) -> Dict[str, Any]:
@@ -234,7 +416,10 @@ class ImageAnalyzer:
             'materials': [],
             'condition': '状态未知',
             'features': [],
-            'confidence': 0.3
+            'confidence': 0.3,
+            'appearance': '外观特征未知',
+            'structure': '结构特征未知',
+            'status': '状态评估未知'
         }
     
     def validate_image(self, image_data: bytes) -> bool:

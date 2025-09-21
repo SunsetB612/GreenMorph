@@ -5,8 +5,10 @@ GreenMorph FastAPI 主应用
 
 import os
 import time
+import base64
 from contextlib import asynccontextmanager
 from typing import List, Optional
+from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,7 +63,7 @@ app.add_middleware(
 )
 
 # 静态文件服务
-app.mount("/outputs", StaticFiles(directory=settings.output_dir), name="outputs")
+app.mount("/output", StaticFiles(directory=settings.output_dir), name="output")
 
 
 def get_redesign_service() -> RedesignService:
@@ -129,17 +131,48 @@ async def analyze_uploaded_image(
                 detail=f"不支持的文件类型: {file.content_type}"
             )
         
-        # 验证文件大小
+        # 读取文件内容
         content = await file.read()
+        
+        # 验证文件大小
         if len(content) > settings.max_file_size:
             raise HTTPException(
                 status_code=400,
                 detail=f"文件过大，最大支持 {settings.max_file_size} 字节"
             )
         
-        # 创建分析请求
-        request = ImageAnalysisRequest(image_base64=content.hex())
-        return await service.analyze_image(request)
+        # 保存上传的图片
+        import uuid
+        import os
+        from datetime import datetime
+        
+        # 获取文件扩展名
+        file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+        
+        # 获取当前input目录中的文件数量作为序号
+        input_dir = Path(settings.input_dir)
+        input_dir.mkdir(exist_ok=True)
+        existing_files = list(input_dir.glob("input*.*"))
+        sequence_num = len(existing_files) + 1
+        
+        # 保存原始图片
+        filename = f"input{sequence_num}.{file_extension}"
+        upload_path = input_dir / filename
+        
+        with open(upload_path, 'wb') as f:
+            f.write(content)
+        
+        logger.info(f"图片已保存到: {upload_path}")
+        
+        # 直接使用字节数据进行分析，避免不必要的Base64转换
+        result = await service.analyze_image_direct(content)
+        
+        # 在结果中添加文件信息
+        result.uploaded_file = filename
+        result.file_path = str(upload_path)
+        result.input_number = sequence_num
+        
+        return result
         
     except HTTPException:
         raise
@@ -210,6 +243,10 @@ async def redesign_uploaded_item(
         if target_materials:
             materials = [m.strip() for m in target_materials.split(",")]
         
+        # 使用文件管理器保存上传的文件
+        task_id = str(uuid.uuid4())
+        upload_path, _ = service.file_manager.save_uploaded_file(content, file.filename, task_id)
+        
         # 创建再设计请求
         from models import StyleType, MaterialType
         request = RedesignRequest(
@@ -234,7 +271,7 @@ async def redesign_uploaded_item(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/outputs/{filename}")
+@app.get("/output/{filename}")
 async def get_output_file(filename: str):
     """获取输出文件"""
     try:
@@ -248,7 +285,7 @@ async def get_output_file(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.delete("/outputs/{filename}")
+@app.delete("/output/{filename}")
 async def delete_output_file(filename: str):
     """删除输出文件"""
     try:

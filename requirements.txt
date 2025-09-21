@@ -34,6 +34,7 @@ xformers>=0.0.20
 requests>=2.31.0
 python-dotenv>=1.0.0
 pydantic>=2.0.0
+pydantic-settings>=2.0.0
 loguru>=0.7.0
 
 # 机器学习工具

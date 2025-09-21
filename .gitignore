@@ -1,1 +1,6 @@
 .env
+input/
+output/
+test_images/
+logs/
+__pycache__/

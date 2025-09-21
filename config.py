@@ -5,7 +5,8 @@ GreenMorph 配置文件
 
 import os
 from typing import Optional
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -23,8 +24,8 @@ class Settings(BaseSettings):
     # 文件上传配置
     max_file_size: int = 10 * 1024 * 1024  # 10MB
     allowed_image_types: list = ["image/jpeg", "image/png", "image/webp"]
-    upload_dir: str = "uploads"
-    output_dir: str = "outputs"
+    input_dir: str = "input"
+    output_dir: str = "output"
     
     # 多模态大模型API配置
     # 通义千问配置
@@ -51,6 +52,18 @@ class Settings(BaseSettings):
     max_image_size: tuple = (1024, 1024)
     image_quality: int = 95
     
+    @field_validator('max_image_size', mode='before')
+    @classmethod
+    def parse_max_image_size(cls, v):
+        if isinstance(v, str):
+            # 解析 "1024,1024" 格式
+            try:
+                parts = v.split(',')
+                return (int(parts[0]), int(parts[1]))
+            except:
+                return (1024, 1024)
+        return v
+    
     # 环保风格提示词
     eco_style_prompt: str = (
         "eco-friendly, sustainable, natural materials, "
@@ -58,14 +71,16 @@ class Settings(BaseSettings):
         "earth tones, minimalist, clean lines"
     )
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": False,
+        "extra": "ignore"  # 忽略额外的字段
+    }
 
 
 # 全局配置实例
 settings = Settings()
 
 # 确保必要的目录存在
-os.makedirs(settings.upload_dir, exist_ok=True)
+os.makedirs(settings.input_dir, exist_ok=True)
 os.makedirs(settings.output_dir, exist_ok=True)

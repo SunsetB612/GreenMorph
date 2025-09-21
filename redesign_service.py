@@ -20,6 +20,7 @@ from image_analyzer import ImageAnalyzer
 from multimodal_api import MultimodalAPI
 from image_generator import ImageGenerator
 from step_visualizer import StepVisualizer
+from file_manager import FileManager
 from config import settings
 
 
@@ -31,6 +32,7 @@ class RedesignService:
         self.multimodal_api = MultimodalAPI()
         self.image_generator = ImageGenerator()
         self.step_visualizer = StepVisualizer()
+        self.file_manager = FileManager()
         
         logger.info("GreenMorph 服务初始化完成")
     
@@ -48,6 +50,31 @@ class RedesignService:
             # 获取图片数据
             image_data = await self._get_image_data(request)
             
+            # 验证图片
+            if not self.image_analyzer.validate_image(image_data):
+                raise ValueError("图片格式不支持或文件过大")
+            
+            # 分析图片
+            analysis_result = await self.image_analyzer.analyze_image(image_data)
+            
+            logger.info(f"图片分析完成: {len(analysis_result.main_objects)} 个物体")
+            return analysis_result
+            
+        except Exception as e:
+            logger.error(f"图片分析失败: {str(e)}")
+            raise Exception(f"图片分析失败: {str(e)}")
+    
+    async def analyze_image_direct(self, image_data: bytes) -> ImageAnalysisResponse:
+        """
+        直接分析图片字节数据
+        
+        Args:
+            image_data: 图片二进制数据
+            
+        Returns:
+            ImageAnalysisResponse: 分析结果
+        """
+        try:
             # 验证图片
             if not self.image_analyzer.validate_image(image_data):
                 raise ValueError("图片格式不支持或文件过大")
@@ -174,23 +201,23 @@ class RedesignService:
             saved_images = {}
             
             # 保存最终效果图
-            final_filename = f"{task_id}_final.jpg"
-            final_path = self.image_generator.save_image(final_image, final_filename)
+            final_bytes = self._image_to_bytes(final_image)
+            final_path = self.file_manager.save_output_file(final_bytes, task_id, "final")
             saved_images['final_image'] = final_path
             
             # 保存步骤图像
             step_image_paths = []
             for i, step_image in enumerate(step_images):
-                step_filename = f"{task_id}_step_{i+1}.jpg"
-                step_path = self.image_generator.save_image(step_image, step_filename)
+                step_bytes = self._image_to_bytes(step_image)
+                step_path = self.file_manager.save_output_file(step_bytes, task_id, "step", i+1)
                 step_image_paths.append(step_path)
             saved_images['step_images'] = step_image_paths
             
             # 保存步骤可视化
             step_viz_paths = []
             for i, viz_image in enumerate(step_visualizations):
-                viz_filename = f"{task_id}_viz_{i+1}.jpg"
-                viz_path = self.step_visualizer.save_visualization(viz_image, viz_filename)
+                viz_bytes = self._image_to_bytes(viz_image)
+                viz_path = self.file_manager.save_output_file(viz_bytes, task_id, "visualization", i+1)
                 step_viz_paths.append(viz_path)
             saved_images['step_visualizations'] = step_viz_paths
             
@@ -200,6 +227,13 @@ class RedesignService:
         except Exception as e:
             logger.error(f"图像保存失败: {str(e)}")
             raise Exception(f"图像保存失败: {str(e)}")
+    
+    def _image_to_bytes(self, image: Image.Image) -> bytes:
+        """将PIL图像转换为字节"""
+        import io
+        buffer = io.BytesIO()
+        image.save(buffer, format='JPEG', quality=95)
+        return buffer.getvalue()
     
     def _build_redesign_response(
         self,
@@ -248,7 +282,7 @@ class RedesignService:
         # 这里应该根据实际部署情况生成公开URL
         # 暂时返回相对路径
         filename = os.path.basename(file_path)
-        return f"/outputs/{filename}"
+        return f"/output/{filename}"
     
     async def get_health_status(self) -> HealthResponse:
         """获取服务健康状态"""
@@ -263,9 +297,14 @@ class RedesignService:
                 'step_visualizer': True
             }
             
+            # 添加调试信息
+            logger.info(f"健康检查组件状态: {components_status}")
+            
             # 计算整体状态
             all_healthy = all(components_status.values())
             status = "healthy" if all_healthy else "degraded"
+            
+            logger.info(f"整体健康状态: {status}")
             
             return HealthResponse(
                 status=status,

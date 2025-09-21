@@ -18,13 +18,10 @@ class MultimodalAPI:
     
     def __init__(self):
         self.tongyi_client = None
-        self.openai_client = None
-        self.anthropic_client = None
-        self.replicate_client = None
         self._initialize_clients()
     
     def _initialize_clients(self):
-        """初始化各种API客户端"""
+        """初始化通义千问API客户端"""
         try:
             # 初始化通义千问客户端
             if settings.tongyi_api_key:
@@ -32,31 +29,11 @@ class MultimodalAPI:
                 dashscope.api_key = settings.tongyi_api_key
                 self.tongyi_client = dashscope
                 logger.info("通义千问客户端初始化成功")
-            
-            # 初始化OpenAI客户端（备用）
-            if settings.openai_api_key:
-                import openai
-                self.openai_client = openai.AsyncOpenAI(
-                    api_key=settings.openai_api_key
-                )
-                logger.info("OpenAI客户端初始化成功")
-            
-            # 初始化Anthropic客户端（备用）
-            if settings.anthropic_api_key:
-                import anthropic
-                self.anthropic_client = anthropic.AsyncAnthropic(
-                    api_key=settings.anthropic_api_key
-                )
-                logger.info("Anthropic客户端初始化成功")
-            
-            # 初始化Replicate客户端（备用）
-            if settings.replicate_api_token:
-                import replicate
-                self.replicate_client = replicate
-                logger.info("Replicate客户端初始化成功")
+            else:
+                logger.warning("未配置通义千问API密钥")
                 
         except Exception as e:
-            logger.error(f"API客户端初始化失败: {str(e)}")
+            logger.error(f"通义千问客户端初始化失败: {str(e)}")
     
     async def analyze_image_with_vision(
         self, 
@@ -76,29 +53,13 @@ class MultimodalAPI:
             str: 分析结果
         """
         try:
-            if model == "auto":
-                # 自动选择可用的模型，优先使用通义千问
+            if model == "auto" or model == "tongyi":
                 if self.tongyi_client:
                     return await self._analyze_with_tongyi(image_base64, prompt)
-                elif self.openai_client:
-                    return await self._analyze_with_openai(image_base64, prompt)
-                elif self.anthropic_client:
-                    return await self._analyze_with_anthropic(image_base64, prompt)
-                elif self.replicate_client:
-                    return await self._analyze_with_replicate(image_base64, prompt)
                 else:
-                    raise Exception("没有可用的多模态模型")
-            
-            elif model == "tongyi" and self.tongyi_client:
-                return await self._analyze_with_tongyi(image_base64, prompt)
-            elif model == "openai" and self.openai_client:
-                return await self._analyze_with_openai(image_base64, prompt)
-            elif model == "anthropic" and self.anthropic_client:
-                return await self._analyze_with_anthropic(image_base64, prompt)
-            elif model == "replicate" and self.replicate_client:
-                return await self._analyze_with_replicate(image_base64, prompt)
+                    raise Exception("通义千问客户端未初始化")
             else:
-                raise Exception(f"指定的模型 {model} 不可用")
+                raise Exception(f"不支持的模型: {model}，只支持通义千问")
                 
         except Exception as e:
             logger.error(f"图片分析失败: {str(e)}")
@@ -132,7 +93,30 @@ class MultimodalAPI:
             )
             
             if response.status_code == 200:
-                return response.output.choices[0].message.content[0].text
+                try:
+                    if hasattr(response, 'output') and hasattr(response.output, 'choices') and response.output.choices:
+                        choice = response.output.choices[0]
+                        if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
+                            content = choice.message.content
+                            if isinstance(content, list) and len(content) > 0:
+                                if isinstance(content[0], dict) and 'text' in content[0]:
+                                    return content[0]['text']
+                                elif hasattr(content[0], 'text'):
+                                    return content[0].text
+                                else:
+                                    return str(content[0])
+                            elif isinstance(content, str):
+                                return content
+                            else:
+                                return str(content)
+                        else:
+                            return str(choice.message)
+                    else:
+                        return str(response.output)
+                    
+                except Exception as parse_error:
+                    logger.error(f"响应解析失败: {str(parse_error)}")
+                    return "分析完成，但无法解析具体内容"
             else:
                 raise Exception(f"通义千问API调用失败: {response.message}")
                 
@@ -140,89 +124,6 @@ class MultimodalAPI:
             logger.error(f"通义千问分析失败: {str(e)}")
             raise
     
-    async def _analyze_with_openai(self, image_base64: str, prompt: str) -> str:
-        """使用OpenAI GPT-4V分析图片"""
-        try:
-            response = await self.openai_client.chat.completions.create(
-                model=settings.openai_model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_base64}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                max_tokens=2000,
-                temperature=0.3
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            logger.error(f"OpenAI分析失败: {str(e)}")
-            raise
-    
-    async def _analyze_with_anthropic(self, image_base64: str, prompt: str) -> str:
-        """使用Anthropic Claude分析图片"""
-        try:
-            response = await self.anthropic_client.messages.create(
-                model=settings.anthropic_model,
-                max_tokens=2000,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": image_base64
-                                }
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt
-                            }
-                        ]
-                    }
-                ]
-            )
-            
-            return response.content[0].text
-            
-        except Exception as e:
-            logger.error(f"Anthropic分析失败: {str(e)}")
-            raise
-    
-    async def _analyze_with_replicate(self, image_base64: str, prompt: str) -> str:
-        """使用Replicate模型分析图片"""
-        try:
-            # 将base64转换为文件对象
-            image_data = base64.b64decode(image_base64)
-            
-            # 使用Replicate的视觉模型
-            output = await self.replicate_client.async_run(
-                "yorickvp/llava-13b:6bc1c7bb0d2a34e413301fee8f7cc728d2d4e75bfab186aa995f63292bda92fc",
-                input={
-                    "image": image_data,
-                    "prompt": prompt,
-                    "max_new_tokens": 2000
-                }
-            )
-            
-            return str(output)
-            
-        except Exception as e:
-            logger.error(f"Replicate分析失败: {str(e)}")
-            raise
     
     async def generate_redesign_plan(
         self,
@@ -249,15 +150,11 @@ class MultimodalAPI:
                 image_analysis, user_requirements, target_style, target_materials
             )
             
-            # 调用文本生成模型，优先使用通义千问
+            # 调用通义千问生成文本
             if self.tongyi_client:
                 response = await self._generate_text_with_tongyi(prompt)
-            elif self.openai_client:
-                response = await self._generate_text_with_openai(prompt)
-            elif self.anthropic_client:
-                response = await self._generate_text_with_anthropic(prompt)
             else:
-                raise Exception("没有可用的文本生成模型")
+                raise Exception("通义千问客户端未初始化")
             
             # 解析响应
             return self._parse_redesign_response(response)
@@ -315,44 +212,6 @@ class MultimodalAPI:
         - 提供直观、友好的视觉参考
         """
     
-    async def _generate_text_with_openai(self, prompt: str) -> str:
-        """使用OpenAI生成文本"""
-        try:
-            response = await self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "你是一个专业的旧物改造设计师，擅长环保设计和可持续发展。"},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=3000,
-                temperature=0.7
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            logger.error(f"OpenAI文本生成失败: {str(e)}")
-            raise
-    
-    async def _generate_text_with_anthropic(self, prompt: str) -> str:
-        """使用Anthropic生成文本"""
-        try:
-            response = await self.anthropic_client.messages.create(
-                model="claude-3-sonnet-20240229",
-                max_tokens=3000,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"你是一个专业的旧物改造设计师，擅长环保设计和可持续发展。\n\n{prompt}"
-                    }
-                ]
-            )
-            
-            return response.content[0].text
-            
-        except Exception as e:
-            logger.error(f"Anthropic文本生成失败: {str(e)}")
-            raise
     
     def _parse_redesign_response(self, response: str) -> Dict[str, Any]:
         """解析改造计划响应"""
@@ -473,10 +332,6 @@ class MultimodalAPI:
             
             if self.tongyi_client:
                 response = await self._generate_text_with_tongyi(prompt)
-            elif self.openai_client:
-                response = await self._generate_text_with_openai(prompt)
-            elif self.anthropic_client:
-                response = await self._generate_text_with_anthropic(prompt)
             else:
                 # 使用默认提示词
                 response = f"{step_description}, {features_text}, {eco_prompt}, detailed, high quality"

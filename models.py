@@ -54,6 +54,12 @@ class ImageAnalysisResponse(BaseModel):
     dimensions: Optional[Dict[str, float]] = Field(None, description="预估尺寸")
     features: List[str] = Field(description="关键特征")
     confidence: float = Field(description="分析置信度")
+    appearance: Optional[str] = Field(None, description="外观特征描述")
+    structure: Optional[str] = Field(None, description="结构特征描述")
+    status: Optional[str] = Field(None, description="状态评估")
+    uploaded_file: Optional[str] = Field(None, description="上传的文件名")
+    file_path: Optional[str] = Field(None, description="文件保存路径")
+    input_number: Optional[int] = Field(None, description="输入图片编号")
 
 
 class RedesignRequest(BaseModel):

@@ -12,9 +12,9 @@ from PIL import Image
 import cv2
 import numpy as np
 import torch
-from diffusers import StableDiffusionControlNetPipeline, ControlNetModel
-from diffusers import DDIMScheduler
-from controlnet_aux import CannyDetector, OpenposeDetector
+# from diffusers import StableDiffusionControlNetPipeline, ControlNetModel
+# from diffusers import DDIMScheduler
+# from controlnet_aux import CannyDetector, OpenposeDetector
 from loguru import logger
 
 from config import settings
@@ -29,44 +29,22 @@ class ImageGenerator:
         self.controlnet = None
         self.canny_detector = None
         self.openpose_detector = None
+        self.use_tongyi = True  # 使用通义千问API
         self._initialize_models()
     
     def _initialize_models(self):
         """初始化图像生成模型"""
         try:
-            logger.info(f"初始化图像生成模型，设备: {self.device}")
-            
-            # 初始化ControlNet
-            self.controlnet = ControlNetModel.from_pretrained(
-                settings.controlnet_model,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
-            )
-            
-            # 初始化Stable Diffusion管道
-            self.pipeline = StableDiffusionControlNetPipeline.from_pretrained(
-                settings.image_generation_model,
-                controlnet=self.controlnet,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                safety_checker=None,
-                requires_safety_checker=False
-            )
-            
-            # 移动到设备
-            self.pipeline = self.pipeline.to(self.device)
-            
-            # 优化内存使用
-            if self.device == "cuda":
-                self.pipeline.enable_memory_efficient_attention()
-                self.pipeline.enable_xformers_memory_efficient_attention()
-            
-            # 初始化检测器
-            self.canny_detector = CannyDetector()
-            self.openpose_detector = OpenposeDetector.from_pretrained("lllyasviel/Annotators")
-            
-            logger.info("图像生成模型初始化完成")
+            logger.info("初始化通义千问图像生成API")
+            # 使用通义千问API，无需加载本地模型
+            self.pipeline = None
+            self.controlnet = None
+            self.canny_detector = None
+            self.openpose_detector = None
+            logger.info("通义千问图像生成API初始化完成")
             
         except Exception as e:
-            logger.error(f"模型初始化失败: {str(e)}")
+            logger.error(f"通义千问API初始化失败: {str(e)}")
             # 使用备用方案
             self._initialize_fallback_models()
     
@@ -79,6 +57,41 @@ class ImageGenerator:
             pass
         except Exception as e:
             logger.error(f"备用模型初始化失败: {str(e)}")
+    
+    async def _generate_with_tongyi(self, prompt: str, original_image: Image.Image = None) -> Image.Image:
+        """使用通义千问API生成图像"""
+        try:
+            from dashscope import ImageSynthesis
+            
+            # 调用通义千问图像生成API
+            # 确保prompt是字符串格式
+            if not isinstance(prompt, str):
+                prompt = str(prompt)
+            
+            response = ImageSynthesis.call(
+                model='wanx-v1',
+                prompt=prompt,
+                n=1,
+                size='1024*1024'
+            )
+            
+            if response.status_code == 200:
+                # 下载生成的图像
+                import requests
+                from io import BytesIO
+                
+                image_url = response.output.results[0].url
+                img_response = requests.get(image_url)
+                img_data = BytesIO(img_response.content)
+                
+                return Image.open(img_data)
+            else:
+                raise Exception(f"通义千问图像生成失败: {response.message}")
+                
+        except Exception as e:
+            logger.error(f"通义千问图像生成失败: {str(e)}")
+            # 返回原图作为备用
+            return original_image if original_image else Image.new('RGB', (512, 512), 'white')
     
     async def generate_final_effect_image(
         self,
@@ -100,19 +113,14 @@ class ImageGenerator:
             Image.Image: 最终效果图
         """
         try:
-            # 提取原图的结构控制信息
-            control_image = self._extract_control_structure(original_image)
-            
             # 构建图像生成提示词
             prompt = self._build_final_image_prompt(
                 redesign_plan, user_requirements, target_style
             )
             
-            # 生成图像
-            if self.pipeline:
-                result_image = await self._generate_with_controlnet(
-                    control_image, prompt, original_image
-                )
+            # 使用通义千问生成图像
+            if self.use_tongyi:
+                result_image = await self._generate_with_tongyi(prompt, original_image)
             else:
                 # 使用备用方案
                 result_image = await self._generate_fallback_image(
@@ -153,9 +161,13 @@ class ImageGenerator:
                 logger.info(f"生成第 {i+1} 步图像: {step.get('title', '未知步骤')}")
                 
                 # 为每个步骤生成图像
-                step_image = await self._generate_step_image(
-                    original_image, step, base_features, i
-                )
+                if self.use_tongyi:
+                    step_prompt = step.get('image_prompt', f"step {i+1}: {step.get('title', '改造步骤')}")
+                    step_image = await self._generate_with_tongyi(step_prompt, original_image)
+                else:
+                    step_image = await self._generate_step_image(
+                        original_image, step, base_features, i
+                    )
                 
                 step_images.append(step_image)
             
@@ -359,6 +371,10 @@ class ImageGenerator:
     def validate_generation_requirements(self) -> bool:
         """验证图像生成环境要求"""
         try:
+            # 如果使用通义千问API，直接返回True
+            if self.use_tongyi:
+                return True
+            
             # 检查CUDA可用性
             if self.device == "cuda":
                 if not torch.cuda.is_available():

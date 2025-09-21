@@ -47,7 +47,7 @@ def check_environment():
     logger.info("检查环境配置...")
     
     # 检查必要的目录
-    os.makedirs(settings.upload_dir, exist_ok=True)
+    os.makedirs(settings.input_dir, exist_ok=True)
     os.makedirs(settings.output_dir, exist_ok=True)
     os.makedirs("logs", exist_ok=True)
     
