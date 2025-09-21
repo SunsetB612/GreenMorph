@@ -40,6 +40,7 @@ class ImageAnalyzer:
             ai_analysis = await self._ai_analyze_image(image)
             
             # 合并分析结果
+            logger.info(f"AI分析结果: {ai_analysis}")
             result = ImageAnalysisResponse(
                 main_objects=ai_analysis.get('objects', []),
                 materials=ai_analysis.get('materials', []),
@@ -125,7 +126,12 @@ class ImageAnalyzer:
     
     def _build_analysis_prompt(self) -> str:
         """构建图片分析提示词"""
-        return """请仔细分析这张图像中显示的旧物品，专注于提取物品的客观特征信息。
+        return """请仔细分析这张图像中显示的旧物品，专注于识别和提取**单个主要旧物**的客观特征信息。
+
+**重要提示**：
+- 如果图像中有多个物品，请选择**最主要、最突出的旧物**进行分析
+- 忽略背景物品、装饰品、小物件等次要元素
+- 专注于一个可以独立进行改造的主要物品
 
 请按照以下结构输出分析结果：
 
@@ -158,10 +164,10 @@ class ImageAnalyzer:
 - 需要修复或处理的问题
 - 物品的清洁程度
 
-请确保分析客观、准确，专注于描述物品的现有特征，不要涉及改造建议。
+请确保分析客观、准确，专注于描述**单个主要旧物**的现有特征，不要涉及改造建议。
 
 请以JSON格式返回结果，包含以下字段：
-- objects: 主要物体列表
+- objects: 主要物体列表（只包含一个主要物品）
 - materials: 材料类型列表
 - condition: 物品状态描述
 - features: 关键特征列表
@@ -228,11 +234,31 @@ class ImageAnalyzer:
                         colors.append(color)
                     elif isinstance(color, dict) and 'name' in color:
                         colors.append(color['name'])
-            elif 'appearance' in data and isinstance(data['appearance'], dict):
+            elif 'appearance' in data:
                 # 从外观特征中提取颜色
-                color_info = data['appearance'].get('color', '')
-                if color_info and isinstance(color_info, str):
-                    colors.append(color_info)
+                if isinstance(data['appearance'], dict):
+                    color_info = data['appearance'].get('color', '')
+                    if color_info and isinstance(color_info, str):
+                        colors.append(color_info)
+                elif isinstance(data['appearance'], str):
+                    # 如果appearance是字符串，尝试从中提取颜色信息
+                    import re
+                    # 查找颜色相关的描述
+                    color_patterns = [
+                        r'颜色[：:]\s*([^，,;。]+)',
+                        r'色调[：:]\s*([^，,;。]+)',
+                        r'主色调[：:]\s*([^，,;。]+)',
+                        r'color_scheme[：:]\s*([^，,;。]+)',
+                        r'([^，,;。]*色[^，,;。]*)',
+                    ]
+                    for pattern in color_patterns:
+                        matches = re.findall(pattern, data['appearance'])
+                        for match in matches:
+                            if match and len(match.strip()) > 0 and '色' in match:
+                                colors.append(match.strip())
+                                break
+                        if colors:  # 如果找到颜色就停止
+                            break
             
             # 提取特征
             features = []
@@ -258,59 +284,83 @@ class ImageAnalyzer:
                     condition = data['condition'].get('overall', '未知')
                 else:
                     condition = str(data['condition'])
+            elif 'status' in data:
+                # 如果没有condition字段，尝试从status字段提取
+                if isinstance(data['status'], dict):
+                    condition = data['status'].get('general_condition', data['status'].get('overall_condition', '未知'))
+                elif isinstance(data['status'], str):
+                    # 从字符串中提取状态信息
+                    import re
+                    status_match = re.search(r'general_condition[：:]\s*([^;]+)', data['status'])
+                    if status_match:
+                        condition = status_match.group(1).strip()
+                    else:
+                        # 如果没有找到，尝试提取第一个描述
+                        parts = data['status'].split(';')
+                        if parts:
+                            condition = parts[0].strip()
             
             # 提取外观特征
             appearance = None
-            if 'appearance' in data and isinstance(data['appearance'], dict):
-                appearance_parts = []
-                for key, value in data['appearance'].items():
-                    if isinstance(value, str):
-                        appearance_parts.append(f"{key}: {value}")
-                appearance = "; ".join(appearance_parts)
+            if 'appearance' in data:
+                if isinstance(data['appearance'], dict):
+                    appearance_parts = []
+                    for key, value in data['appearance'].items():
+                        if isinstance(value, str):
+                            appearance_parts.append(f"{key}: {value}")
+                    appearance = "; ".join(appearance_parts)
+                elif isinstance(data['appearance'], str):
+                    appearance = data['appearance']
             
             # 提取结构特征
             structure = None
-            if 'structure' in data and isinstance(data['structure'], dict):
-                structure_parts = []
-                for key, value in data['structure'].items():
-                    if isinstance(value, str):
-                        structure_parts.append(f"{key}: {value}")
-                    elif isinstance(value, list):
-                        # 处理列表中的字典或字符串
-                        list_items = []
-                        for item in value:
-                            if isinstance(item, dict):
-                                # 如果是字典，提取关键信息
-                                if 'component' in item and 'connection' in item:
-                                    list_items.append(f"{item['component']}: {item['connection']}")
+            if 'structure' in data:
+                if isinstance(data['structure'], dict):
+                    structure_parts = []
+                    for key, value in data['structure'].items():
+                        if isinstance(value, str):
+                            structure_parts.append(f"{key}: {value}")
+                        elif isinstance(value, list):
+                            # 处理列表中的字典或字符串
+                            list_items = []
+                            for item in value:
+                                if isinstance(item, dict):
+                                    # 如果是字典，提取关键信息
+                                    if 'component' in item and 'connection' in item:
+                                        list_items.append(f"{item['component']}: {item['connection']}")
+                                    else:
+                                        list_items.append(str(item))
                                 else:
                                     list_items.append(str(item))
-                            else:
-                                list_items.append(str(item))
-                        structure_parts.append(f"{key}: {', '.join(list_items)}")
-                structure = "; ".join(structure_parts)
+                            structure_parts.append(f"{key}: {', '.join(list_items)}")
+                    structure = "; ".join(structure_parts)
+                elif isinstance(data['structure'], str):
+                    structure = data['structure']
             
             # 提取状态评估
             status = None
-            if 'status' in data and isinstance(data['status'], dict):
-                status_parts = []
-                for key, value in data['status'].items():
-                    if isinstance(value, str):
-                        status_parts.append(f"{key}: {value}")
-                    elif isinstance(value, list):
-                        # 处理列表中的字典或字符串
-                        list_items = []
-                        for item in value:
-                            if isinstance(item, dict):
-                                # 如果是字典，提取关键信息
-                                if 'location' in item and 'description' in item:
-                                    list_items.append(f"{item['location']}: {item['description']}")
+            if 'status' in data:
+                if isinstance(data['status'], dict):
+                    status_parts = []
+                    for key, value in data['status'].items():
+                        if isinstance(value, str):
+                            status_parts.append(f"{key}: {value}")
+                        elif isinstance(value, list):
+                            # 处理列表中的字典或字符串
+                            list_items = []
+                            for item in value:
+                                if isinstance(item, dict):
+                                    # 如果是字典，提取关键信息
+                                    if 'location' in item and 'description' in item:
+                                        list_items.append(f"{item['location']}: {item['description']}")
+                                    else:
+                                        list_items.append(str(item))
                                 else:
                                     list_items.append(str(item))
-                            else:
-                                list_items.append(str(item))
-                        status_parts.append(f"{key}: {', '.join(list_items)}")
-                status = "; ".join(status_parts)
+                            status_parts.append(f"{key}: {', '.join(list_items)}")
+                    status = "; ".join(status_parts)
+                elif isinstance(data['status'], str):
+                    status = data['status']
             
             # 提取尺寸信息
             dimensions = None
@@ -354,6 +404,7 @@ class ImageAnalyzer:
         except Exception as e:
             logger.warning(f"AI数据转换失败: {str(e)}")
             logger.warning(f"原始数据: {data}")
+            logger.warning(f"数据类型: {type(data)}")
             return self._get_default_analysis()
     
     def _map_material_type(self, material: str) -> str:
