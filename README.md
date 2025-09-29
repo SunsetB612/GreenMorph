@@ -72,7 +72,8 @@ GreenMorph/
 - **开发目录**: `frontend/src/`
 - **主要页面**: 
   - `pages/Home.tsx` - 首页
-  - `pages/Redesign.tsx` - 旧物改造
+  - `pages/Profile.tsx` - 个人中心
+  - `pages/About.tsx` - 关于页面
   - `pages/Community.tsx` - 社区
   - `pages/AIAssistant.tsx` - AI助手
 - **开发命令**: `npm run dev`
@@ -81,9 +82,14 @@ GreenMorph/
 - **技术栈**: FastAPI + SQLAlchemy + Pydantic
 - **开发目录**: `app/`
 - **主要模块**:
-  - `api/` - API路由定义
-  - `models/` - 数据模型
-  - `services/` - 业务逻辑
+  - `core/` - 核心业务模块
+    - `auth/` - 用户认证
+    - `user/` - 用户管理
+    - `community/` - 社区功能
+    - `gamification/` - 激励系统
+    - `redesign/` - 旧物改造
+  - `shared/` - 共享工具和模型
+  - `static/` - 静态文件存储
 - **开发命令**: `python run.py`
 
 ### 数据库
