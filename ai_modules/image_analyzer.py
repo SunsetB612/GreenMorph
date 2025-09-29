@@ -9,8 +9,8 @@ from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image
 from loguru import logger
 
-from models import ImageAnalysisResponse, MaterialType
-from config import settings
+from app.shared.models import ImageAnalysisResponse, MaterialType
+from app.config import settings
 
 
 class ImageAnalyzer:

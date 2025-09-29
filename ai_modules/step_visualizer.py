@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 from loguru import logger
 
-from config import settings
+from app.config import settings
 
 
 class StepVisualizer:

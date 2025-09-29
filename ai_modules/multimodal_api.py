@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List
 import aiohttp
 from loguru import logger
 
-from config import settings
+from app.config import settings
 
 
 class MultimodalAPI:

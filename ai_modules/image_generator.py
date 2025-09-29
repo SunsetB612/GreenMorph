@@ -17,7 +17,7 @@ import torch
 # from controlnet_aux import CannyDetector, OpenposeDetector
 from loguru import logger
 
-from config import settings
+from app.config import settings
 
 
 class ImageGenerator:

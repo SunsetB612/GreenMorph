@@ -11,16 +11,17 @@ from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image
 from loguru import logger
 
-from models import (
+from app.shared.models import (
     ImageAnalysisRequest, ImageAnalysisResponse,
     RedesignRequest, RedesignResponse, RedesignStep,
     ErrorResponse, HealthResponse
 )
-from image_analyzer import ImageAnalyzer
-from multimodal_api import MultimodalAPI
-from image_generator import ImageGenerator
-from step_visualizer import StepVisualizer
-from config import settings
+from ai_modules.image_analyzer import ImageAnalyzer
+from ai_modules.multimodal_api import MultimodalAPI
+from ai_modules.image_generator import ImageGenerator
+from ai_modules.step_visualizer import StepVisualizer
+from app.shared.utils.file_manager import FileManager
+from app.config import settings
 
 
 class RedesignService:
@@ -31,6 +32,7 @@ class RedesignService:
         self.multimodal_api = MultimodalAPI()
         self.image_generator = ImageGenerator()
         self.step_visualizer = StepVisualizer()
+        self.file_manager = FileManager()
         
         logger.info("GreenMorph 服务初始化完成")
     

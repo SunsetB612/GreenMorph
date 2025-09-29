@@ -13,7 +13,7 @@ from loguru import logger
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import settings
+from app.config import settings
 
 
 def setup_logging(debug: bool = False):
@@ -113,7 +113,7 @@ def main():
     try:
         # 启动服务器
         uvicorn.run(
-            "main:app",
+            "app.main:app",
             host=args.host,
             port=args.port,
             reload=args.reload,

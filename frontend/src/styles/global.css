@@ -1,0 +1,299 @@
+/* 全局样式 */
+/* 绿色环保主题CSS变量 */
+:root {
+  /* 主色调 - 自然绿色系 */
+  --primary-color: #52c41a;           /* 主绿色 */
+  --primary-hover: #73d13d;           /* 悬停绿色 */
+  --primary-active: #389e0d;          /* 激活深绿色 */
+  --primary-light: #f6ffed;           /* 浅绿色背景 */
+  
+  /* 辅助绿色系 */
+  --success-color: #52c41a;           /* 成功绿色 */
+  --success-light: #f6ffed;           /* 成功浅色背景 */
+  --info-color: #13c2c2;              /* 信息青色 */
+  --warning-color: #faad14;           /* 警告橙色 */
+  --error-color: #ff4d4f;             /* 错误红色 */
+  
+  /* 自然色彩 */
+  --forest-green: #237804;            /* 森林绿 */
+  --mint-green: #b7eb8f;              /* 薄荷绿 */
+  --sage-green: #95de64;              /* 鼠尾草绿 */
+  --emerald: #36cfc9;                 /* 翡翠绿 */
+  
+  /* 文字颜色 */
+  --text-color: #262626;              /* 主文字 */
+  --text-secondary: #8c8c8c;          /* 次要文字 */
+  --text-light: #ffffff;             /* 浅色文字 */
+  
+  /* 背景和边框 */
+  --background-color: #f6ffed;        /* 浅绿背景 */
+  --card-background: #ffffff;         /* 卡片背景 */
+  --border-color: #d9f7be;            /* 浅绿边框 */
+  --border-color-dark: #b7eb8f;       /* 深绿边框 */
+  
+  /* 阴影和圆角 */
+  --shadow: 0 2px 8px rgba(82, 196, 26, 0.1);
+  --shadow-hover: 0 4px 12px rgba(82, 196, 26, 0.15);
+  --border-radius: 8px;
+  --border-radius-lg: 12px;
+  
+  /* 动画 */
+  --transition: all 0.3s ease;
+  --transition-fast: all 0.2s ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+#root {
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--card-background);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-color-dark);
+}
+
+/* 响应式工具类 */
+.text-center {
+  text-align: center;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.mb-0 { margin-bottom: 0; }
+.mb-1 { margin-bottom: 8px; }
+.mb-2 { margin-bottom: 16px; }
+.mb-3 { margin-bottom: 24px; }
+.mb-4 { margin-bottom: 32px; }
+
+.mt-0 { margin-top: 0; }
+.mt-1 { margin-top: 8px; }
+.mt-2 { margin-top: 16px; }
+.mt-3 { margin-top: 24px; }
+.mt-4 { margin-top: 32px; }
+
+/* 卡片悬停效果 */
+.ant-card {
+  transition: all 0.3s ease;
+}
+
+.ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 按钮样式优化 */
+.ant-btn {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.ant-btn-primary {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
+  border: none;
+  box-shadow: var(--shadow);
+  transition: var(--transition);
+}
+
+.ant-btn-primary:hover {
+  background: linear-gradient(135deg, var(--primary-hover) 0%, var(--sage-green) 100%);
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
+}
+
+/* Menu组件绿色主题 */
+.ant-menu {
+  background: transparent !important;
+}
+
+.ant-menu-item {
+  color: var(--text-primary) !important;
+  border-radius: 6px !important;
+  margin: 4px 8px !important;
+  transition: all 0.3s ease !important;
+}
+
+.ant-menu-item:hover {
+  background-color: var(--primary-color-light) !important;
+  color: var(--primary-color) !important;
+}
+
+.ant-menu-item-selected {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+}
+
+.ant-menu-item-selected:hover {
+  background-color: var(--primary-color-dark) !important;
+  color: white !important;
+}
+
+.ant-menu-item-selected .anticon {
+  color: white !important;
+}
+
+.ant-menu-item .anticon {
+  color: var(--text-primary) !important;
+  transition: color 0.3s ease !important;
+}
+
+.ant-menu-item:hover .anticon {
+  color: var(--primary-color) !important;
+}
+
+/* 输入框样式优化 */
+.ant-input,
+.ant-input-affix-wrapper {
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.ant-input:focus,
+.ant-input-affix-wrapper:focus,
+.ant-input-affix-wrapper-focused {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(82, 196, 26, 0.2);
+}
+
+/* 标签页样式优化 */
+.ant-tabs-tab {
+  font-weight: 500;
+}
+
+.ant-tabs-tab-active {
+  color: var(--primary-color);
+}
+
+/* 头像样式优化 */
+.ant-avatar {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 统计数字样式 */
+.ant-statistic-content {
+  font-weight: 600;
+}
+
+/* 时间线样式优化 */
+.ant-timeline-item-content {
+  margin-left: 8px;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .ant-card {
+    margin-bottom: 16px;
+  }
+  
+  .ant-typography h1 {
+    font-size: 24px;
+  }
+  
+  .ant-typography h2 {
+    font-size: 20px;
+  }
+  
+  .ant-typography h3 {
+    font-size: 18px;
+  }
+  
+  .ant-btn {
+    height: 40px;
+    font-size: 14px;
+  }
+}
+
+/* 绿色主题增强样式 */
+.ant-card {
+  border: 1px solid var(--border-color);
+  transition: var(--transition);
+}
+
+.ant-card:hover {
+  border-color: var(--border-color-dark);
+  box-shadow: var(--shadow-hover);
+}
+
+/* 成功状态样式 */
+.ant-result-success .ant-result-icon > .anticon {
+  color: var(--success-color);
+}
+
+/* 统计数字绿色主题 */
+.ant-statistic-content-value {
+  color: var(--primary-color);
+}
+
+/* 进度条绿色主题 */
+.ant-progress-bg {
+  background-color: var(--primary-color);
+}
+
+/* 标签绿色主题 */
+.ant-tag-green {
+  background-color: var(--success-light);
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+
+/* 深色模式支持 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-color: #0d1b0d;
+    --card-background: #1a2e1a;
+    --text-color: #e6f7e6;
+    --text-secondary: #a8d8a8;
+    --border-color: #2d4a2d;
+    --border-color-dark: #3d5a3d;
+  }
+  
+  body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+  }
+  
+  .ant-card {
+    background: var(--card-background);
+    border-color: var(--border-color);
+  }
+  
+  .ant-typography {
+    color: var(--text-color);
+  }
+}
