@@ -51,8 +51,23 @@ def check_environment():
     os.makedirs(settings.output_dir, exist_ok=True)
     os.makedirs("logs", exist_ok=True)
     
+    # 检查MySQL连接
+    try:
+        from sqlalchemy import create_engine, text
+        engine = create_engine(settings.database_url)
+        with engine.connect() as connection:
+            result = connection.execute(text("SELECT 1"))
+        logger.info("MySQL数据库连接正常")
+    except Exception as e:
+        logger.error(f"MySQL数据库连接失败: {str(e)}")
+        logger.info("请确保MySQL服务正在运行，并检查数据库配置")
+        logger.info("可以运行 'python init_mysql_db.py' 来初始化数据库")
+        return False
+    
     # 检查API密钥
     api_keys_available = []
+    if settings.tongyi_api_key:
+        api_keys_available.append("通义千问")
     if settings.openai_api_key:
         api_keys_available.append("OpenAI")
     if settings.anthropic_api_key:
@@ -63,7 +78,8 @@ def check_environment():
     if not api_keys_available:
         logger.warning("未检测到任何API密钥，某些功能可能不可用")
         logger.info("请配置以下环境变量之一：")
-        logger.info("- OPENAI_API_KEY (推荐)")
+        logger.info("- TONGYI_API_KEY (推荐)")
+        logger.info("- OPENAI_API_KEY")
         logger.info("- ANTHROPIC_API_KEY")
         logger.info("- REPLICATE_API_TOKEN")
     else:
@@ -80,6 +96,7 @@ def check_environment():
         logger.warning("PyTorch未安装，图像生成功能可能不可用")
     
     logger.info("环境检查完成")
+    return True
 
 
 def main():
@@ -98,7 +115,9 @@ def main():
     setup_logging(args.debug)
     
     # 检查环境
-    check_environment()
+    if not check_environment():
+        logger.error("环境检查失败，请解决上述问题后重试")
+        sys.exit(1)
     
     # 启动信息
     logger.info("=" * 60)

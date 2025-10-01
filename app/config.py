@@ -19,8 +19,16 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     
-    # 数据库配置 - 默认使用SQLite，可通过环境变量覆盖
-    database_url: str = "sqlite:///./greenmorph.db"
+    # MySQL数据库配置
+    mysql_host: str = "localhost"
+    mysql_port: int = 3306
+    mysql_username: str = "greenmorph"
+    mysql_password: str = "greenmorph123"
+    mysql_database: str = "greenmorph"
+    mysql_charset: str = "utf8mb4"
+    
+    # 数据库连接URL（自动生成）
+    database_url: str = ""
     
     # JWT配置
     secret_key: str = "your-secret-key-here"
@@ -72,6 +80,13 @@ class Settings(BaseSettings):
 
 # 全局配置实例
 settings = Settings()
+
+# 自动生成MySQL连接URL
+settings.database_url = (
+    f"mysql+pymysql://{settings.mysql_username}:{settings.mysql_password}"
+    f"@{settings.mysql_host}:{settings.mysql_port}/{settings.mysql_database}"
+    f"?charset={settings.mysql_charset}"
+)
 
 # 确保必要的目录存在
 os.makedirs(settings.input_dir, exist_ok=True)

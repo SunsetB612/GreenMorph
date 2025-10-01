@@ -28,7 +28,7 @@ class Post(Base):
     # 关系
     user = relationship("User", back_populates="posts")
     comments = relationship("Comment", back_populates="post")
-    likes = relationship("Like", back_populates="target_post")
+    # likes关系通过多态设计，不需要直接关系
 
 
 class Comment(Base):
@@ -43,7 +43,7 @@ class Comment(Base):
     # 关系
     post = relationship("Post", back_populates="comments")
     user = relationship("User", back_populates="comments")
-    likes = relationship("Like", back_populates="target_comment")
+    # likes关系通过多态设计，不需要直接关系
 
 
 class Like(Base):
@@ -57,5 +57,4 @@ class Like(Base):
     
     # 关系
     user = relationship("User", back_populates="likes")
-    target_post = relationship("Post", back_populates="likes", foreign_keys=[target_id])
-    target_comment = relationship("Comment", back_populates="likes", foreign_keys=[target_id])
+    # 多态关系不需要直接的外键关系

@@ -4,21 +4,28 @@
 
 ## 🚀 快速启动
 
-### 1. 后端启动
+### 1. 数据库准备
 ```bash
+# 确保MySQL服务正在运行
 # 安装依赖
 pip install -r requirements.txt
 
+# 初始化MySQL数据库
+python init_mysql_db.py
+```
+
+### 2. 后端启动
+```bash
 # 配置环境变量
-cp env_example.txt .env
-# 编辑 .env 文件，填入API密钥
+cp .env.example .env
+# 编辑 .env 文件，填入API密钥和MySQL配置
 
 # 启动后端服务
 python run.py
 ```
 后端服务: http://localhost:8000
 
-### 2. 前端启动
+### 3. 前端启动
 ```bash
 cd frontend
 
@@ -93,9 +100,10 @@ GreenMorph/
 - **开发命令**: `python run.py`
 
 ### 数据库
-- **文件**: `greenmorph.db` (SQLite)
+- **类型**: MySQL 8.0+
 - **设计文档**: `database_design.md`
-- **主要表**: users, projects, posts, comments
+- **主要表**: users, redesign_projects, posts, comments, likes, achievements
+- **初始化**: 运行 `python init_mysql_db.py` 创建数据库和表
 
 ### API文档
 - 开发环境: http://localhost:8000/docs
