@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-MySQL数据库初始化脚本
-创建数据库和用户，并初始化表结构
+MySQL数据库初始化脚本 v3.0
+根据最新的数据库设计创建数据库和表结构
 """
 
 import os
@@ -20,12 +20,15 @@ from app.config import settings
 def create_database_and_user():
     """创建数据库和用户"""
     try:
+        # 获取用户输入的密码
+        password = input("请输入MySQL root密码: ")
+        
         # 连接到MySQL服务器（不指定数据库）
         connection = pymysql.connect(
             host=settings.mysql_host,
             port=settings.mysql_port,
             user='root',  # 使用root用户创建数据库
-            password=input("请输入MySQL root密码: "),
+            password=password,
             charset='utf8mb4'
         )
         
@@ -34,14 +37,8 @@ def create_database_and_user():
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{settings.mysql_database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
             logger.info(f"数据库 '{settings.mysql_database}' 创建成功")
             
-            # 创建用户（如果不存在）
-            cursor.execute(f"CREATE USER IF NOT EXISTS '{settings.mysql_username}'@'%' IDENTIFIED BY '{settings.mysql_password}'")
-            logger.info(f"用户 '{settings.mysql_username}' 创建成功")
-            
-            # 授权
-            cursor.execute(f"GRANT ALL PRIVILEGES ON `{settings.mysql_database}`.* TO '{settings.mysql_username}'@'%'")
-            cursor.execute("FLUSH PRIVILEGES")
-            logger.info("用户权限设置成功")
+            # 使用root用户，不需要创建新用户
+            logger.info("使用root用户，跳过用户创建步骤")
             
         connection.close()
         return True
@@ -54,7 +51,11 @@ def create_database_and_user():
 def test_connection():
     """测试数据库连接"""
     try:
-        engine = create_engine(settings.database_url)
+        # 使用用户输入的密码构建连接URL
+        password = input("请再次输入MySQL root密码进行连接测试: ")
+        test_url = f"mysql+pymysql://root:{password}@{settings.mysql_host}:{settings.mysql_port}/{settings.mysql_database}?charset={settings.mysql_charset}"
+        
+        engine = create_engine(test_url)
         with engine.connect() as connection:
             result = connection.execute(text("SELECT 1"))
             logger.info("数据库连接测试成功")
@@ -65,16 +66,158 @@ def test_connection():
 
 
 def create_tables():
-    """创建所有表"""
+    """根据新的数据库设计创建所有表"""
     try:
-        from app.database import engine, Base
-        from app.core.user.models import User
-        from app.core.redesign.models import RedesignProject
-        from app.core.community.models import Post, Comment, Like
-        from app.core.gamification.models import Achievement, UserAchievement
+        # 使用用户输入的密码构建连接URL
+        password = input("请再次输入MySQL root密码创建表: ")
+        database_url = f"mysql+pymysql://root:{password}@{settings.mysql_host}:{settings.mysql_port}/{settings.mysql_database}?charset={settings.mysql_charset}"
+        engine = create_engine(database_url)
         
-        # 创建所有表
-        Base.metadata.create_all(bind=engine)
+        # 创建所有表的SQL语句
+        create_tables_sql = """
+        -- 1. 用户表
+        CREATE TABLE IF NOT EXISTS users (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            username VARCHAR(50) UNIQUE NOT NULL,
+            email VARCHAR(100) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            avatar_path VARCHAR(255),
+            bio TEXT,
+            skill_level ENUM('beginner', 'intermediate', 'advanced') DEFAULT 'beginner',
+            points INT DEFAULT 0,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        );
+
+        -- 2. 用户输入图片表
+        CREATE TABLE IF NOT EXISTS input_images (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            user_id BIGINT NOT NULL,
+            original_filename VARCHAR(255),
+            input_image_path VARCHAR(500) NOT NULL,
+            input_image_size INT,
+            mime_type VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        -- 3. 用户输入需求表
+        CREATE TABLE IF NOT EXISTS input_demand (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            user_id BIGINT NOT NULL,
+            demand TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        -- 4. 改造项目表
+        CREATE TABLE IF NOT EXISTS redesign_projects (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            user_id BIGINT NOT NULL,
+            project_name VARCHAR(200) NOT NULL,
+            input_image_id BIGINT,
+            input_demand_id BIGINT,
+            output_image_path VARCHAR(500),
+            output_pdf_path VARCHAR(500),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (input_image_id) REFERENCES input_images(id) ON DELETE SET NULL,
+            FOREIGN KEY (input_demand_id) REFERENCES input_demand(id) ON DELETE SET NULL
+        );
+
+        -- 5. 改造步骤表
+        CREATE TABLE IF NOT EXISTS redesign_steps (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            project_id BIGINT NOT NULL,
+            step_number INT NOT NULL,
+            description TEXT NOT NULL,
+            step_image_path VARCHAR(500),
+            FOREIGN KEY (project_id) REFERENCES redesign_projects(id) ON DELETE CASCADE,
+            INDEX idx_project_step (project_id, step_number)
+        );
+
+        -- 6. 项目详情表
+        CREATE TABLE IF NOT EXISTS project_details (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            project_id BIGINT NOT NULL,
+            total_cost_estimate TEXT,
+            total_time_estimate TEXT,
+            difficulty_level VARCHAR(20),
+            materials_and_tools TEXT,
+            safety_notes TEXT,
+            tips TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES redesign_projects(id) ON DELETE CASCADE
+        );
+
+        -- 7. 社区帖子表
+        CREATE TABLE IF NOT EXISTS posts (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            user_id BIGINT NOT NULL,
+            title VARCHAR(200) NOT NULL,
+            content TEXT NOT NULL,
+            images JSON,
+            likes_count INT DEFAULT 0,
+            comments_count INT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        -- 8. 评论表
+        CREATE TABLE IF NOT EXISTS comments (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            post_id BIGINT NOT NULL,
+            user_id BIGINT NOT NULL,
+            content TEXT NOT NULL,
+            images JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        -- 9. 点赞表
+        CREATE TABLE IF NOT EXISTS likes (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            user_id BIGINT NOT NULL,
+            target_type ENUM('post', 'comment') NOT NULL,
+            target_id BIGINT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_like (user_id, target_type, target_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        -- 10. 成就表
+        CREATE TABLE IF NOT EXISTS achievements (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(100) NOT NULL,
+            description TEXT,
+            icon_filename VARCHAR(255),
+            condition_type ENUM('project_count', 'post_count', 'likes_received') NOT NULL,
+            condition_value INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 11. 用户成就表
+        CREATE TABLE IF NOT EXISTS user_achievements (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            user_id BIGINT NOT NULL,
+            achievement_id BIGINT NOT NULL,
+            earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_user_achievement (user_id, achievement_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (achievement_id) REFERENCES achievements(id) ON DELETE CASCADE
+        );
+        """
+        
+        with engine.connect() as connection:
+            # 执行创建表的SQL
+            for statement in create_tables_sql.split(';'):
+                if statement.strip():
+                    connection.execute(text(statement))
+                    connection.commit()
+        
         logger.info("数据库表创建成功")
         return True
         
@@ -86,49 +229,25 @@ def create_tables():
 def insert_initial_data():
     """插入初始数据"""
     try:
-        from app.database import SessionLocal
-        from app.core.gamification.models import Achievement, ConditionType
+        # 使用用户输入的密码构建连接URL
+        password = input("请再次输入MySQL root密码插入数据: ")
+        database_url = f"mysql+pymysql://root:{password}@{settings.mysql_host}:{settings.mysql_port}/{settings.mysql_database}?charset={settings.mysql_charset}"
+        engine = create_engine(database_url)
         
-        db = SessionLocal()
+        # 插入初始成就数据
+        insert_achievements_sql = """
+        INSERT INTO achievements (name, description, condition_type, condition_value) VALUES
+        ('新手改造师', '完成第一个改造项目', 'project_count', 1),
+        ('社区活跃者', '发布第一个帖子', 'post_count', 1),
+        ('改造达人', '完成10个改造项目', 'project_count', 10),
+        ('社区明星', '获得100个点赞', 'likes_received', 100);
+        """
         
-        # 创建初始成就数据
-        achievements = [
-            Achievement(
-                name="新手改造师",
-                description="完成第一个改造项目",
-                condition_type=ConditionType.PROJECT_COUNT,
-                condition_value=1,
-                points=10
-            ),
-            Achievement(
-                name="社区活跃者",
-                description="发布第一个帖子",
-                condition_type=ConditionType.POST_COUNT,
-                condition_value=1,
-                points=5
-            ),
-            Achievement(
-                name="改造达人",
-                description="完成10个改造项目",
-                condition_type=ConditionType.PROJECT_COUNT,
-                condition_value=10,
-                points=50
-            ),
-            Achievement(
-                name="社区明星",
-                description="获得100个点赞",
-                condition_type=ConditionType.LIKES_RECEIVED,
-                condition_value=100,
-                points=100
-            )
-        ]
+        with engine.connect() as connection:
+            connection.execute(text(insert_achievements_sql))
+            connection.commit()
         
-        for achievement in achievements:
-            db.add(achievement)
-        
-        db.commit()
         logger.info("初始数据插入成功")
-        db.close()
         return True
         
     except Exception as e:
@@ -139,7 +258,7 @@ def insert_initial_data():
 def main():
     """主函数"""
     logger.info("=" * 60)
-    logger.info("🚀 开始初始化MySQL数据库")
+    logger.info("🚀 开始初始化MySQL数据库 v3.0")
     logger.info("=" * 60)
     
     # 步骤1: 创建数据库和用户

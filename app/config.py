@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     # MySQL数据库配置
     mysql_host: str = "localhost"
     mysql_port: int = 3306
-    mysql_username: str = "greenmorph"
-    mysql_password: str = "greenmorph123"
+    mysql_username: str = "root"
+    mysql_password: str = ""  # 从环境变量获取
     mysql_database: str = "greenmorph"
     mysql_charset: str = "utf8mb4"
     
