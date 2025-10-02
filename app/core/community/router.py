@@ -2,7 +2,7 @@
 社区功能API路由
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile, File
 
 router = APIRouter()
 
@@ -18,6 +18,112 @@ async def get_posts():
 async def create_post():
     """创建帖子"""
     pass
+
+
+@router.post("/posts/{post_id}/images")
+async def upload_post_image(
+    post_id: int,
+    file: UploadFile = File(...),
+    # current_user: User = Depends(get_current_user)  # TODO: 添加用户认证
+    # db: Session = Depends(get_db)  # TODO: 添加数据库依赖
+):
+    """上传帖子图片"""
+    from app.shared.utils.file_manager import FileManager
+    from app.core.community.image_models import CommunityImage, ImageType
+    from fastapi import HTTPException
+    
+    # 验证文件类型
+    if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+        raise HTTPException(status_code=400, detail="不支持的图片格式")
+    
+    # 读取文件内容
+    content = await file.read()
+    
+    # 保存文件
+    file_manager = FileManager()
+    userid = "user1"  # TODO: 从认证中获取真实用户ID
+    
+    file_path, public_url = file_manager.save_uploaded_file(
+        content=content,
+        filename=file.filename,
+        userid=userid,
+        category="posts",
+        post_id=str(post_id)
+    )
+    
+    # TODO: 保存到数据库
+    # community_image = CommunityImage(
+    #     uploader_id=1,  # TODO: 从认证中获取真实用户ID
+    #     original_filename=file.filename,
+    #     file_path=file_path,
+    #     file_size=len(content),
+    #     mime_type=file.content_type,
+    #     image_type=ImageType.POST,
+    #     target_id=post_id
+    # )
+    # db.add(community_image)
+    # db.commit()
+    
+    return {
+        "message": "帖子图片上传成功",
+        "file_path": file_path,
+        "public_url": public_url,
+        "filename": file.filename,
+        "size": len(content)
+    }
+
+
+@router.post("/comments/{comment_id}/images")
+async def upload_comment_image(
+    comment_id: int,
+    file: UploadFile = File(...),
+    # current_user: User = Depends(get_current_user)  # TODO: 添加用户认证
+    # db: Session = Depends(get_db)  # TODO: 添加数据库依赖
+):
+    """上传评论图片"""
+    from app.shared.utils.file_manager import FileManager
+    from app.core.community.image_models import CommunityImage, ImageType
+    from fastapi import HTTPException
+    
+    # 验证文件类型
+    if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+        raise HTTPException(status_code=400, detail="不支持的图片格式")
+    
+    # 读取文件内容
+    content = await file.read()
+    
+    # 保存文件
+    file_manager = FileManager()
+    userid = "user1"  # TODO: 从认证中获取真实用户ID
+    
+    file_path, public_url = file_manager.save_uploaded_file(
+        content=content,
+        filename=file.filename,
+        userid=userid,
+        category="comments",
+        post_id=str(comment_id)  # 这里用comment_id作为目录名
+    )
+    
+    # TODO: 保存到数据库
+    # community_image = CommunityImage(
+    #     uploader_id=1,  # TODO: 从认证中获取真实用户ID
+    #     original_filename=file.filename,
+    #     file_path=file_path,
+    #     file_size=len(content),
+    #     mime_type=file.content_type,
+    #     image_type=ImageType.COMMENT,
+    #     target_id=comment_id
+    # )
+    # db.add(community_image)
+    # db.commit()
+    
+    return {
+        "message": "评论图片上传成功",
+        "file_path": file_path,
+        "public_url": public_url,
+        "filename": file.filename,
+        "size": len(content)
+    }
 
 
 @router.get("/posts/{post_id}")

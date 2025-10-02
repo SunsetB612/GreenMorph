@@ -65,7 +65,7 @@ app.add_middleware(
 )
 
 # 静态文件服务
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/output", StaticFiles(directory=settings.output_dir), name="output")
 
 
@@ -99,7 +99,7 @@ async def health_check():
     return HealthResponse(
         status="healthy",
         version=settings.app_version,
-        timestamp=int(time.time())
+        timestamp=str(int(time.time()))
     )
 
 

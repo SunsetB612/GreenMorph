@@ -22,15 +22,10 @@ class FileManager:
     
     def _ensure_directories(self):
         """确保必要的目录存在"""
-        self.input_dir.mkdir(parents=True, exist_ok=True)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 创建子目录
-        (self.input_dir / "avatars").mkdir(exist_ok=True)
-        (self.input_dir / "redesign_projects").mkdir(exist_ok=True)
-        (self.input_dir / "posts").mkdir(exist_ok=True)
-        (self.output_dir / "redesign_projects").mkdir(exist_ok=True)
-        (self.output_dir / "steps").mkdir(exist_ok=True)
+        # 现在按用户分目录，不需要在初始化时创建固定目录
+        # 目录将在实际使用时按需创建
+        static_dir = Path("static")
+        static_dir.mkdir(exist_ok=True)
     
     def save_uploaded_file(
         self, 
@@ -39,7 +34,8 @@ class FileManager:
         userid: str,
         task_id: str = None,
         category: str = "input",
-        prefix: str = None
+        prefix: str = None,
+        post_id: str = None
     ) -> Tuple[str, str]:
         """
         保存上传的文件到用户专属目录
@@ -76,8 +72,17 @@ class FileManager:
                 # 使用时间戳 + 原始文件名
                 new_filename = f"{timestamp}_{base_name}{file_extension}"
             
-            # 创建用户专属目录
-            user_dir = Path("static") / userid / category
+            # 创建目录结构
+            if category == "posts" and post_id:
+                # 帖子图片存放在社区公共目录
+                user_dir = Path("static") / "community" / "posts" / post_id
+            elif category == "comments" and post_id:
+                # 评论图片按评论ID分组
+                user_dir = Path("static") / "community" / "comments" / post_id
+            else:
+                # 用户相关文件（input, output等）
+                user_dir = Path("static") / "users" / userid / category
+            
             user_dir.mkdir(parents=True, exist_ok=True)
             
             file_path = user_dir / new_filename
@@ -87,7 +92,12 @@ class FileManager:
                 f.write(content)
             
             # 生成公开URL
-            public_url = f"/static/{userid}/{category}/{new_filename}"
+            if category == "posts" and post_id:
+                public_url = f"/static/community/posts/{post_id}/{new_filename}"
+            elif category == "comments" and post_id:
+                public_url = f"/static/community/comments/{post_id}/{new_filename}"
+            else:
+                public_url = f"/static/users/{userid}/{category}/{new_filename}"
             
             logger.info(f"文件已保存到用户目录: {file_path}")
             return str(file_path), public_url
@@ -101,7 +111,8 @@ class FileManager:
         content: bytes, 
         task_id: str, 
         file_type: str,
-        step_number: Optional[int] = None
+        step_number: Optional[int] = None,
+        userid: str = "user1"
     ) -> str:
         """
         保存输出文件
@@ -126,11 +137,16 @@ class FileManager:
             else:
                 filename = f"{task_id}_{file_type}.jpg"
             
-            # 确定保存目录
+            # 确定保存目录 - 按用户分目录
+            user_output_dir = Path("static") / userid / "output"
+            
             if file_type == "step" or file_type == "visualization":
-                save_dir = self.output_dir / "steps"
+                save_dir = user_output_dir / "steps"
             else:
-                save_dir = self.output_dir / "redesign_projects"
+                save_dir = user_output_dir / "result"
+            
+            # 确保目录存在
+            save_dir.mkdir(parents=True, exist_ok=True)
             
             file_path = save_dir / filename
             

@@ -81,7 +81,6 @@ def create_tables():
             username VARCHAR(50) UNIQUE NOT NULL,
             email VARCHAR(100) UNIQUE NOT NULL,
             password_hash VARCHAR(255) NOT NULL,
-            avatar_path VARCHAR(255),
             bio TEXT,
             skill_level ENUM('beginner', 'intermediate', 'advanced') DEFAULT 'beginner',
             points INT DEFAULT 0,
@@ -157,7 +156,6 @@ def create_tables():
             user_id BIGINT NOT NULL,
             title VARCHAR(200) NOT NULL,
             content TEXT NOT NULL,
-            images JSON,
             likes_count INT DEFAULT 0,
             comments_count INT DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -171,13 +169,29 @@ def create_tables():
             post_id BIGINT NOT NULL,
             user_id BIGINT NOT NULL,
             content TEXT NOT NULL,
-            images JSON,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
-        -- 9. 点赞表
+        -- 9. 社区图片表
+        CREATE TABLE IF NOT EXISTS community_images (
+            id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            uploader_id BIGINT NOT NULL,
+            original_filename VARCHAR(255),
+            file_path VARCHAR(500) NOT NULL,
+            file_size INT,
+            mime_type VARCHAR(100),
+            image_type ENUM('post', 'comment') NOT NULL,
+            target_id BIGINT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            
+            FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_target (image_type, target_id),
+            INDEX idx_uploader (uploader_id)
+        );
+
+        -- 10. 点赞表
         CREATE TABLE IF NOT EXISTS likes (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
             user_id BIGINT NOT NULL,
@@ -188,7 +202,7 @@ def create_tables():
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
-        -- 10. 成就表
+        -- 11. 成就表
         CREATE TABLE IF NOT EXISTS achievements (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
             name VARCHAR(100) NOT NULL,
@@ -199,7 +213,7 @@ def create_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- 11. 用户成就表
+        -- 12. 用户成就表
         CREATE TABLE IF NOT EXISTS user_achievements (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
             user_id BIGINT NOT NULL,

@@ -23,7 +23,6 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False, index=True)
     email = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
-    avatar_path = Column(String(255))  # 修正字段名
     bio = Column(Text)
     skill_level = Column(Enum(SkillLevel), default=SkillLevel.beginner)
     points = Column(Integer, default=0)

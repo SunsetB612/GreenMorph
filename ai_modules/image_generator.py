@@ -68,11 +68,21 @@ class ImageGenerator:
             if not isinstance(prompt, str):
                 prompt = str(prompt)
             
-            response = ImageSynthesis.call(
-                model='wanx-v1',
-                prompt=prompt,
-                n=1,
-                size='1024*1024'
+            # 添加超时设置
+            import asyncio
+            
+            def sync_call():
+                return ImageSynthesis.call(
+                    model='wanx-v1',
+                    prompt=prompt,
+                    n=1,
+                    size='1024*1024'
+                )
+            
+            # 设置60秒超时
+            response = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(None, sync_call),
+                timeout=60.0
             )
             
             if response.status_code == 200:
@@ -81,7 +91,7 @@ class ImageGenerator:
                 from io import BytesIO
                 
                 image_url = response.output.results[0].url
-                img_response = requests.get(image_url)
+                img_response = requests.get(image_url, timeout=30)
                 img_data = BytesIO(img_response.content)
                 
                 return Image.open(img_data)

@@ -45,6 +45,7 @@ async def init_db():
             RedesignStep, ProjectDetail
         )
         from app.core.community.models import Post, Comment, Like
+        from app.core.community.image_models import CommunityImage
         from app.core.gamification.models import Achievement, UserAchievement
         
         # 创建所有表

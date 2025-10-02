@@ -54,6 +54,7 @@ class ImageAnalysisResponse(BaseModel):
 class RedesignRequest(BaseModel):
     """旧物再设计请求"""
     image_url: Optional[str] = Field(None, description="旧物图片URL")
+    input_image_id: Optional[int] = Field(None, description="已上传图片的ID")
     user_requirements: str = Field(description="用户改造需求描述")
     target_style: StyleType = Field(description="目标风格")
     target_materials: Optional[List[MaterialType]] = Field(None, description="目标材料")

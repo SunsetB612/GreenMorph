@@ -40,9 +40,9 @@ class Settings(BaseSettings):
     allowed_image_types: list = ["image/jpeg", "image/png", "image/webp"]
     
     # 文件存储路径
-    static_dir: str = "app/static"
-    input_dir: str = "app/static/input"
-    output_dir: str = "app/static/output"
+    static_dir: str = "static"
+    input_dir: str = "static/input"
+    output_dir: str = "static/output"
     
     # AI模型配置
     tongyi_api_key: Optional[str] = None

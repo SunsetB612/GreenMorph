@@ -21,7 +21,6 @@ class Post(Base):
     user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)
-    images = Column(JSON)
     likes_count = Column(Integer, default=0)
     comments_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -36,7 +35,6 @@ class Comment(Base):
     post_id = Column(BigInteger, ForeignKey("posts.id"), nullable=False)
     user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
     content = Column(Text, nullable=False)
-    images = Column(JSON)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

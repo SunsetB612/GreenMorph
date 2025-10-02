@@ -9,7 +9,6 @@ CREATE TABLE users (
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    avatar_path VARCHAR(255),
     bio TEXT,
     skill_level ENUM('beginner', 'intermediate', 'advanced') DEFAULT 'beginner',
     points INT DEFAULT 0,
@@ -95,14 +94,13 @@ CREATE TABLE project_details (
 );
 ```
 
-### 7. 社区帖子表 (posts) - 保持不变
+### 7. 社区帖子表 (posts) - 优化版
 ```sql
 CREATE TABLE posts (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NOT NULL,
     title VARCHAR(200) NOT NULL,
     content TEXT NOT NULL,
-    images JSON,
     likes_count INT DEFAULT 0,
     comments_count INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -111,21 +109,39 @@ CREATE TABLE posts (
 );
 ```
 
-### 8. 评论表 (comments) - 保持不变
+### 8. 评论表 (comments) - 优化版
 ```sql
 CREATE TABLE comments (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     post_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     content TEXT NOT NULL,
-    images JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 ```
 
-### 9. 点赞表 (likes) - 保持不变
+### 9. 社区图片表 (community_images) - 新增
+```sql
+CREATE TABLE community_images (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    uploader_id BIGINT NOT NULL,
+    original_filename VARCHAR(255),
+    file_path VARCHAR(500) NOT NULL,
+    file_size INT,
+    mime_type VARCHAR(100),
+    image_type ENUM('post', 'comment') NOT NULL,
+    target_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_target (image_type, target_id),
+    INDEX idx_uploader (uploader_id)
+);
+```
+
+### 10. 点赞表 (likes) - 保持不变
 ```sql
 CREATE TABLE likes (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -138,7 +154,7 @@ CREATE TABLE likes (
 );
 ```
 
-### 10. 成就表 (achievements) - 保持不变
+### 11. 成就表 (achievements) - 保持不变
 ```sql
 CREATE TABLE achievements (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -151,7 +167,7 @@ CREATE TABLE achievements (
 );
 ```
 
-### 11. 用户成就表 (user_achievements) - 保持不变
+### 12. 用户成就表 (user_achievements) - 保持不变
 ```sql
 CREATE TABLE user_achievements (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -177,10 +193,13 @@ CREATE TABLE user_achievements (
 - 支持步骤排序和编号
 
 ### 3. **文件存储策略**
-- 原始图片：`input_images`
+- 用户改造项目图片：`static/users/{userid}/input/` 和 `static/users/{userid}/output/`
+- 社区帖子图片：`static/community/posts/{post_id}/`
+- 评论图片：`static/community/comments/{comment_id}/`
+- 原始图片记录：`input_images` 表
 - 最终效果图：`redesign_projects.output_image_path`
 - 步骤图：`redesign_steps.step_image_path`
-- PDF说明书：`redesign_projects.output_pdf_path`
+- 社区图片：`community_images` 表
 
 ### 4. **数据关联清晰**
 - 通过外键关联输入和输出

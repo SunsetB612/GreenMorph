@@ -66,11 +66,33 @@ async def analyze_image(
         # 注意：这里暂时使用userid="user1"，实际应用中应该从认证中获取用户ID
         userid = "user1"  # TODO: 从认证中获取真实用户ID
         
-        # 根据分析结果生成有意义的文件名前缀
+        # 根据分析结果生成有意义的文件名前缀（英文）
         main_objects = result.main_objects
         if main_objects:
-            # 使用识别到的主要物体作为前缀
-            prefix = main_objects[0].replace(" ", "_").lower()
+            # 将中文对象名转换为英文
+            chinese_to_english = {
+                "椅子": "chair",
+                "桌子": "table", 
+                "沙发": "sofa",
+                "柜子": "cabinet",
+                "床": "bed",
+                "书架": "bookshelf",
+                "咖啡机": "coffee_machine",
+                "咖啡机部件": "coffee_parts",
+                "煎锅": "frying_pan",
+                "黄色扶手椅": "yellow_armchair",
+                "扶手椅": "armchair",
+                "家具": "furniture",
+                "旧物": "old_item"
+            }
+            
+            main_object = main_objects[0]
+            # 尝试翻译，如果没有对应翻译则使用英文处理
+            if main_object in chinese_to_english:
+                prefix = chinese_to_english[main_object]
+            else:
+                # 如果是英文，直接处理
+                prefix = main_object.replace(" ", "_").lower()
         else:
             prefix = "unknown_item"
         
@@ -116,7 +138,8 @@ async def analyze_image(
 async def generate_redesign(
     request: RedesignRequest,
     background_tasks: BackgroundTasks,
-    service: RedesignService = Depends(get_redesign_service)
+    service: RedesignService = Depends(get_redesign_service),
+    db: Session = Depends(get_db)
 ):
     """
     生成再设计方案
@@ -127,15 +150,31 @@ async def generate_redesign(
     try:
         logger.info(f"开始生成再设计方案")
         
+        # 验证请求参数
+        if not request.image_url and not request.input_image_id:
+            raise HTTPException(status_code=400, detail="必须提供图片URL或已上传图片的ID")
+        
+        # 如果提供了图片ID，从数据库获取图片信息
+        if request.input_image_id:
+            input_image = db.query(InputImage).filter(InputImage.id == request.input_image_id).first()
+            if not input_image:
+                raise HTTPException(status_code=404, detail="指定的图片不存在")
+            
+            # 设置图片URL为本地文件路径
+            request.image_url = input_image.input_image_path
+            logger.info(f"使用已上传的图片: {input_image.original_filename}")
+        
         # 调用再设计服务
-        result = await service.redesign_item(request)
+        result = await service.redesign_item(request, db)
         
         # 后台任务：保存结果到数据库
-        background_tasks.add_task(service.save_redesign_result, result)
+        background_tasks.add_task(service.save_redesign_result, result, db)
         
         logger.info(f"再设计方案生成完成")
         return result
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"再设计方案生成失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"再设计方案生成失败: {str(e)}")
