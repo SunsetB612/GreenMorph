@@ -40,7 +40,10 @@ async def init_db():
     try:
         # 导入所有模型以确保它们被注册
         from app.core.user.models import User
-        from app.core.redesign.models import RedesignProject
+        from app.core.redesign.models import (
+            InputImage, InputDemand, RedesignProject, 
+            RedesignStep, ProjectDetail
+        )
         from app.core.community.models import Post, Comment, Like
         from app.core.gamification.models import Achievement, UserAchievement
         

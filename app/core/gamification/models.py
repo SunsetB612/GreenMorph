@@ -2,8 +2,8 @@
 激励系统数据模型
 """
 
-from sqlalchemy import Column, BigInteger, String, Text, ForeignKey, Integer, Enum
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, BigInteger, String, Text, ForeignKey, Integer, Enum, DateTime
+from sqlalchemy.sql import func
 from app.database import Base
 import enum
 
@@ -24,10 +24,7 @@ class Achievement(Base):
     icon_filename = Column(String(255))
     condition_type = Column(Enum(ConditionType), nullable=False)
     condition_value = Column(Integer, nullable=False)
-    points = Column(Integer, default=10)
-    
-    # 关系
-    user_achievements = relationship("UserAchievement", back_populates="achievement")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class UserAchievement(Base):
@@ -37,7 +34,4 @@ class UserAchievement(Base):
     id = Column(BigInteger, primary_key=True, index=True)
     user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
     achievement_id = Column(BigInteger, ForeignKey("achievements.id"), nullable=False)
-    
-    # 关系
-    user = relationship("User", back_populates="user_achievements")
-    achievement = relationship("Achievement", back_populates="user_achievements")
+    earned_at = Column(DateTime(timezone=True), server_default=func.now())

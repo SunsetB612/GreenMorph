@@ -2,16 +2,17 @@
 用户数据模型
 """
 
-from sqlalchemy import Column, BigInteger, String, Text, Enum, Integer, Boolean
+from sqlalchemy import Column, BigInteger, String, Text, Enum, Integer, Boolean, DateTime
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from app.database import Base
 import enum
 
 
 class SkillLevel(str, enum.Enum):
-    BEGINNER = "beginner"
-    INTERMEDIATE = "intermediate"
-    ADVANCED = "advanced"
+    beginner = "beginner"
+    intermediate = "intermediate" 
+    advanced = "advanced"
 
 
 class User(Base):
@@ -22,15 +23,17 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False, index=True)
     email = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
-    avatar_filename = Column(String(255))
+    avatar_path = Column(String(255))  # 修正字段名
     bio = Column(Text)
-    skill_level = Column(Enum(SkillLevel), default=SkillLevel.BEGINNER)
+    skill_level = Column(Enum(SkillLevel), default=SkillLevel.beginner)
     points = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
-    # 关系
-    redesign_projects = relationship("RedesignProject", back_populates="user")
-    posts = relationship("Post", back_populates="user")
-    comments = relationship("Comment", back_populates="user")
-    likes = relationship("Like", back_populates="user")
-    user_achievements = relationship("UserAchievement", back_populates="user")
+    # 关系定义暂时注释掉，避免循环导入问题
+    # redesign_projects = relationship("RedesignProject", back_populates="user", lazy="dynamic")
+    # posts = relationship("Post", back_populates="user", lazy="dynamic")
+    # comments = relationship("Comment", back_populates="user", lazy="dynamic")
+    # likes = relationship("Like", back_populates="user", lazy="dynamic")
+    # user_achievements = relationship("UserAchievement", back_populates="user", lazy="dynamic")

@@ -32,17 +32,6 @@ class MaterialType(str, Enum):
     PAPER = "paper"
 
 
-class ImageAnalysisRequest(BaseModel):
-    """图片分析请求"""
-    image_url: Optional[str] = Field(None, description="图片URL")
-    image_base64: Optional[str] = Field(None, description="Base64编码的图片")
-    
-    class Config:
-        schema_extra = {
-            "example": {
-                "image_url": "https://example.com/old-item.jpg"
-            }
-        }
 
 
 class ImageAnalysisResponse(BaseModel):
@@ -65,7 +54,6 @@ class ImageAnalysisResponse(BaseModel):
 class RedesignRequest(BaseModel):
     """旧物再设计请求"""
     image_url: Optional[str] = Field(None, description="旧物图片URL")
-    image_base64: Optional[str] = Field(None, description="Base64编码的图片")
     user_requirements: str = Field(description="用户改造需求描述")
     target_style: StyleType = Field(description="目标风格")
     target_materials: Optional[List[MaterialType]] = Field(None, description="目标材料")

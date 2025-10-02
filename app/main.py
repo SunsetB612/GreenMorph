@@ -19,7 +19,7 @@ from loguru import logger
 from app.config import settings
 from app.database import init_db
 from app.shared.models import (
-    ImageAnalysisRequest, ImageAnalysisResponse,
+    ImageAnalysisResponse,
     RedesignRequest, RedesignResponse,
     ErrorResponse, HealthResponse
 )
@@ -76,18 +76,10 @@ def get_redesign_service() -> RedesignService:
     return redesign_service
 
 # 导入路由
-from app.core.auth import router as auth_router
-from app.core.user import router as user_router
 from app.core.redesign import router as redesign_router
-from app.core.community import router as community_router
-from app.core.gamification import router as gamification_router
 
 # 注册路由
-app.include_router(auth_router, prefix="/api/auth", tags=["认证"])
-app.include_router(user_router, prefix="/api/users", tags=["用户"])
 app.include_router(redesign_router, prefix="/api/redesign", tags=["改造项目"])
-app.include_router(community_router, prefix="/api/community", tags=["社区"])
-app.include_router(gamification_router, prefix="/api/gamification", tags=["激励系统"])
 
 
 @app.get("/")
@@ -109,155 +101,6 @@ async def health_check():
         version=settings.app_version,
         timestamp=int(time.time())
     )
-
-
-# ==================== 图片分析API ====================
-
-@app.post("/api/analyze/image", response_model=ImageAnalysisResponse)
-async def analyze_image(
-    file: UploadFile = File(...),
-    service: RedesignService = Depends(get_redesign_service)
-):
-    """
-    分析上传的旧物图片
-    - 识别物品类型、材质、状态
-    - 评估改造潜力
-    - 提供改造建议
-    """
-    try:
-        logger.info(f"开始分析图片: {file.filename}")
-        
-        # 验证文件类型
-        if not file.content_type or not file.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="只支持图片文件")
-        
-        # 读取文件内容
-        content = await file.read()
-        
-        # 调用分析服务
-        result = await service.analyze_image(content, file.filename)
-        
-        logger.info(f"图片分析完成: {file.filename}")
-        return result
-        
-    except Exception as e:
-        logger.error(f"图片分析失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"图片分析失败: {str(e)}")
-
-
-@app.post("/api/analyze/image/base64", response_model=ImageAnalysisResponse)
-async def analyze_image_base64(
-    request: ImageAnalysisRequest,
-    service: RedesignService = Depends(get_redesign_service)
-):
-    """
-    分析Base64编码的图片
-    """
-    try:
-        logger.info("开始分析Base64图片")
-        
-        # 解码Base64图片
-        try:
-            image_data = base64.b64decode(request.image_base64)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="无效的Base64编码")
-        
-        # 调用分析服务
-        result = await service.analyze_image(image_data, request.filename or "image.jpg")
-        
-        logger.info("Base64图片分析完成")
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Base64图片分析失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"图片分析失败: {str(e)}")
-
-
-# ==================== 再设计API ====================
-
-@app.post("/api/redesign/generate", response_model=RedesignResponse)
-async def generate_redesign(
-    request: RedesignRequest,
-    background_tasks: BackgroundTasks,
-    service: RedesignService = Depends(get_redesign_service)
-):
-    """
-    生成再设计方案
-    - 基于图片分析和用户需求
-    - 生成多种改造方案
-    - 提供详细的设计说明和步骤
-    """
-    try:
-        logger.info(f"开始生成再设计方案: {request.project_name}")
-        
-        # 调用再设计服务
-        result = await service.generate_redesign(request)
-        
-        # 后台任务：保存结果到数据库
-        background_tasks.add_task(service.save_redesign_result, result)
-        
-        logger.info(f"再设计方案生成完成: {request.project_name}")
-        return result
-        
-    except Exception as e:
-        logger.error(f"再设计方案生成失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"再设计方案生成失败: {str(e)}")
-
-
-@app.get("/api/redesign/{project_id}")
-async def get_redesign_result(
-    project_id: str,
-    service: RedesignService = Depends(get_redesign_service)
-):
-    """
-    获取再设计结果
-    """
-    try:
-        result = await service.get_redesign_result(project_id)
-        if not result:
-            raise HTTPException(status_code=404, detail="项目不存在")
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取再设计结果失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取结果失败: {str(e)}")
-
-
-@app.get("/api/redesign/{project_id}/download/{image_type}")
-async def download_redesign_image(
-    project_id: str,
-    image_type: str,
-    service: RedesignService = Depends(get_redesign_service)
-):
-    """
-    下载再设计图片
-    - image_type: original, result, step_1, step_2, step_3
-    """
-    try:
-        # 验证图片类型
-        valid_types = ["original", "result", "step_1", "step_2", "step_3"]
-        if image_type not in valid_types:
-            raise HTTPException(status_code=400, detail=f"无效的图片类型，支持的类型: {valid_types}")
-        
-        # 获取图片路径
-        image_path = await service.get_redesign_image_path(project_id, image_type)
-        if not image_path or not Path(image_path).exists():
-            raise HTTPException(status_code=404, detail="图片不存在")
-        
-        return FileResponse(
-            path=image_path,
-            media_type="image/jpeg",
-            filename=f"{project_id}_{image_type}.jpg"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"下载图片失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"下载图片失败: {str(e)}")
 
 
 # ==================== 项目管理API ====================
@@ -314,11 +157,10 @@ async def get_system_info():
     return {
         "app_name": settings.app_name,
         "version": settings.app_version,
-        "environment": settings.environment,
         "debug": settings.debug,
         "output_dir": settings.output_dir,
         "max_file_size": settings.max_file_size,
-        "supported_formats": settings.supported_formats
+        "supported_formats": settings.allowed_image_types
     }
 
 

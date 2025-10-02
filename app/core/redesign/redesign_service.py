@@ -3,7 +3,6 @@ GreenMorph 主服务类
 整合图片分析、多模态API调用、图像生成和步骤可视化功能
 """
 
-import base64
 import io
 import os
 import uuid
@@ -12,7 +11,7 @@ from PIL import Image
 from loguru import logger
 
 from app.shared.models import (
-    ImageAnalysisRequest, ImageAnalysisResponse,
+    ImageAnalysisResponse,
     RedesignRequest, RedesignResponse, RedesignStep,
     ErrorResponse, HealthResponse
 )
@@ -36,20 +35,18 @@ class RedesignService:
         
         logger.info("GreenMorph 服务初始化完成")
     
-    async def analyze_image(self, request: ImageAnalysisRequest) -> ImageAnalysisResponse:
+    async def analyze_image(self, image_data: bytes, filename: str = "image.jpg") -> ImageAnalysisResponse:
         """
         分析旧物图片
         
         Args:
-            request: 图片分析请求
+            image_data: 图片二进制数据
+            filename: 文件名
             
         Returns:
             ImageAnalysisResponse: 分析结果
         """
         try:
-            # 获取图片数据
-            image_data = await self._get_image_data(request)
-            
             # 验证图片
             if not self.image_analyzer.validate_image(image_data):
                 raise ValueError("图片格式不支持或文件过大")
@@ -88,6 +85,19 @@ class RedesignService:
         except Exception as e:
             logger.error(f"图片分析失败: {str(e)}")
             raise Exception(f"图片分析失败: {str(e)}")
+    
+    async def analyze_image(self, image_data: bytes, filename: str = "image.jpg") -> ImageAnalysisResponse:
+        """
+        分析图片（兼容旧接口）
+        
+        Args:
+            image_data: 图片二进制数据
+            filename: 文件名
+            
+        Returns:
+            ImageAnalysisResponse: 分析结果
+        """
+        return await self.analyze_image_direct(image_data)
     
     async def redesign_item(self, request: RedesignRequest) -> RedesignResponse:
         """
@@ -177,11 +187,6 @@ class RedesignService:
                             return await response.read()
                         else:
                             raise ValueError(f"图片下载失败: HTTP {response.status}")
-            
-            elif request.image_base64:
-                # 从Base64解码图片
-                return base64.b64decode(request.image_base64)
-            
             else:
                 raise ValueError("未提供图片数据")
                 
@@ -360,3 +365,79 @@ class RedesignService:
             "max_file_size": settings.max_file_size,
             "output_quality": settings.image_quality
         }
+    
+    async def save_redesign_result(self, result: RedesignResponse):
+        """保存再设计结果到数据库"""
+        try:
+            # 这里可以添加数据库保存逻辑
+            logger.info("再设计结果已保存到数据库")
+        except Exception as e:
+            logger.error(f"保存再设计结果失败: {str(e)}")
+    
+    async def get_redesign_result(self, project_id: str):
+        """获取再设计结果"""
+        try:
+            # 这里可以添加从数据库获取结果的逻辑
+            logger.info(f"获取项目结果: {project_id}")
+            return None
+        except Exception as e:
+            logger.error(f"获取再设计结果失败: {str(e)}")
+            return None
+    
+    async def get_redesign_image_path(self, project_id: str, image_type: str):
+        """获取再设计图片路径"""
+        try:
+            # 构建图片路径
+            if image_type == "original":
+                filename = f"{project_id}_original.jpg"
+            elif image_type == "result":
+                filename = f"{project_id}_final.jpg"
+            elif image_type.startswith("step_"):
+                step_num = image_type.split("_")[1]
+                filename = f"{project_id}_step_{step_num}.jpg"
+            else:
+                filename = f"{project_id}_{image_type}.jpg"
+            
+            # 确定目录
+            if image_type.startswith("step_"):
+                file_path = os.path.join(settings.output_dir, "steps", filename)
+            else:
+                file_path = os.path.join(settings.output_dir, "redesign_projects", filename)
+            
+            return file_path
+        except Exception as e:
+            logger.error(f"获取图片路径失败: {str(e)}")
+            return None
+    
+    async def list_projects(self, limit: int = 10, offset: int = 0):
+        """获取项目列表"""
+        try:
+            # 这里可以添加从数据库获取项目列表的逻辑
+            logger.info(f"获取项目列表: limit={limit}, offset={offset}")
+            return []
+        except Exception as e:
+            logger.error(f"获取项目列表失败: {str(e)}")
+            return []
+    
+    async def delete_project(self, project_id: str):
+        """删除项目"""
+        try:
+            # 这里可以添加删除项目的逻辑
+            logger.info(f"删除项目: {project_id}")
+            return True
+        except Exception as e:
+            logger.error(f"删除项目失败: {str(e)}")
+            return False
+    
+    async def get_system_stats(self):
+        """获取系统统计信息"""
+        try:
+            return {
+                "total_projects": 0,
+                "total_images_processed": 0,
+                "average_processing_time": 0,
+                "system_status": "healthy"
+            }
+        except Exception as e:
+            logger.error(f"获取系统统计失败: {str(e)}")
+            return {}

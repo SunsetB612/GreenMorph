@@ -36,46 +36,60 @@ class FileManager:
         self, 
         content: bytes, 
         filename: str, 
-        task_id: str,
-        category: str = "redesign_projects"
+        userid: str,
+        task_id: str = None,
+        category: str = "input",
+        prefix: str = None
     ) -> Tuple[str, str]:
         """
-        保存上传的文件
+        保存上传的文件到用户专属目录
         
         Args:
             content: 文件内容
             filename: 原始文件名
-            task_id: 任务ID
-            category: 文件分类
+            userid: 用户ID
+            task_id: 任务ID（可选）
+            category: 文件分类（input/output）
+            prefix: 文件名前缀（可选，用于标识文件类型）
             
         Returns:
             Tuple[str, str]: (文件路径, 公开URL)
         """
         try:
-            # 获取文件扩展名
-            file_extension = Path(filename).suffix or '.jpg'
+            # 获取文件扩展名和基础文件名
+            file_path_obj = Path(filename)
+            file_extension = file_path_obj.suffix or '.jpg'
+            base_name = file_path_obj.stem
+            
+            # 生成时间戳
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
             # 生成新文件名
-            new_filename = f"{task_id}_{filename}"
-            
-            # 确定保存路径
-            if category == "avatars":
-                save_dir = self.input_dir / "avatars"
-            elif category == "posts":
-                save_dir = self.input_dir / "posts"
+            if prefix:
+                # 使用前缀 + 时间戳 + 原始文件名
+                new_filename = f"{prefix}_{timestamp}_{base_name}{file_extension}"
+            elif task_id:
+                # 使用任务ID（保持向后兼容）
+                new_filename = f"{task_id}_{filename}"
             else:
-                save_dir = self.input_dir / "redesign_projects"
+                # 使用时间戳 + 原始文件名
+                new_filename = f"{timestamp}_{base_name}{file_extension}"
             
-            file_path = save_dir / new_filename
+            # 创建用户专属目录
+            user_dir = Path("static") / userid / category
+            user_dir.mkdir(parents=True, exist_ok=True)
+            
+            file_path = user_dir / new_filename
             
             # 保存文件
             with open(file_path, 'wb') as f:
                 f.write(content)
             
             # 生成公开URL
-            public_url = f"/static/input/{category}/{new_filename}"
+            public_url = f"/static/{userid}/{category}/{new_filename}"
             
-            logger.info(f"文件已保存: {file_path}")
+            logger.info(f"文件已保存到用户目录: {file_path}")
             return str(file_path), public_url
             
         except Exception as e:

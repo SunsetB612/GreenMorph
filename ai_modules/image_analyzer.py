@@ -109,7 +109,7 @@ class ImageAnalyzer:
             analysis_prompt = self._build_analysis_prompt()
             
             # 调用多模态大模型API
-            from multimodal_api import MultimodalAPI
+            from ai_modules.multimodal_api import MultimodalAPI
             api_client = MultimodalAPI()
             
             result = await api_client.analyze_image_with_vision(
@@ -144,7 +144,7 @@ class ImageAnalyzer:
 - 主要材质类型（木头、金属、塑料、布料、玻璃等）
 - 材质的具体特征（如木材种类、金属类型、表面处理等）
 - 材质的磨损程度和保存状态
-- 材质的颜色和纹理特征
+- 材质的纹理特征（注意：材质类型和颜色要分开描述）
 
 **3. 结构特征描述**
 - 物品的整体结构（框架、支撑、连接方式等）
@@ -156,7 +156,7 @@ class ImageAnalyzer:
 - 物品的整体形状和轮廓
 - 装饰元素和设计细节
 - 表面处理方式（油漆、清漆、未处理等）
-- 颜色搭配和视觉特征
+- **颜色搭配和视觉特征（请详细描述主要颜色，如：黄色、红色、蓝色等。注意：不要将材质类型如"金属"、"木头"等误认为颜色）**
 
 **5. 物品状态评估**
 - 整体保存状态（良好/一般/较差）
@@ -168,7 +168,8 @@ class ImageAnalyzer:
 
 请以JSON格式返回结果，包含以下字段：
 - objects: 主要物体列表（只包含一个主要物品）
-- materials: 材料类型列表
+- materials: 材料类型列表（如：["wood", "metal", "fabric"]）
+- colors: 主要颜色列表（如：["黄色", "棕色", "黑色"]，注意：材质名称如"金属"、"木头"不是颜色）
 - condition: 物品状态描述
 - features: 关键特征列表
 - confidence: 分析置信度(0-1)
@@ -229,11 +230,18 @@ class ImageAnalyzer:
             # 提取颜色信息
             colors = []
             if 'colors' in data and isinstance(data['colors'], list):
+                # 材质名称列表，这些不应该被认为是颜色
+                material_names = ['金属', '木头', '木材', '布料', '织物', '塑料', '玻璃', '陶瓷', '皮革', '纸张', 'metal', 'wood', 'fabric', 'plastic', 'glass', 'ceramic', 'leather', 'paper']
+                
                 for color in data['colors']:
                     if isinstance(color, str):
-                        colors.append(color)
+                        # 过滤掉材质名称
+                        if not any(material in color for material in material_names):
+                            colors.append(color)
                     elif isinstance(color, dict) and 'name' in color:
-                        colors.append(color['name'])
+                        color_name = color['name']
+                        if not any(material in color_name for material in material_names):
+                            colors.append(color_name)
             elif 'appearance' in data:
                 # 从外观特征中提取颜色
                 if isinstance(data['appearance'], dict):
@@ -245,18 +253,32 @@ class ImageAnalyzer:
                     import re
                     # 查找颜色相关的描述
                     color_patterns = [
+                        r'color_scheme[：:]\s*([^，,;。]+)',
                         r'颜色[：:]\s*([^，,;。]+)',
                         r'色调[：:]\s*([^，,;。]+)',
                         r'主色调[：:]\s*([^，,;。]+)',
-                        r'color_scheme[：:]\s*([^，,;。]+)',
                         r'([^，,;。]*色[^，,;。]*)',
+                        r'([^，,;。]*黄[^，,;。]*)',
+                        r'([^，,;。]*红[^，,;。]*)',
+                        r'([^，,;。]*蓝[^，,;。]*)',
+                        r'([^，,;。]*绿[^，,;。]*)',
+                        r'([^，,;。]*黑[^，,;。]*)',
+                        r'([^，,;。]*白[^，,;。]*)',
+                        r'([^，,;。]*棕[^，,;。]*)',
+                        r'([^，,;。]*灰[^，,;。]*)',
+                        r'([^，,;。]*金[^，,;。]*)',
+                        r'([^，,;。]*银[^，,;。]*)',
                     ]
                     for pattern in color_patterns:
                         matches = re.findall(pattern, data['appearance'])
                         for match in matches:
-                            if match and len(match.strip()) > 0 and '色' in match:
-                                colors.append(match.strip())
-                                break
+                            if match and len(match.strip()) > 0:
+                                # 清理颜色描述
+                                color_text = match.strip()
+                                # 更宽松的匹配条件
+                                if any(color_word in color_text for color_word in ['色', '黄', '红', '蓝', '绿', '黑', '白', '棕', '灰', '金', '银', 'color']):
+                                    colors.append(color_text)
+                                    break
                         if colors:  # 如果找到颜色就停止
                             break
             
@@ -287,15 +309,26 @@ class ImageAnalyzer:
             elif 'status' in data:
                 # 如果没有condition字段，尝试从status字段提取
                 if isinstance(data['status'], dict):
-                    condition = data['status'].get('general_condition', data['status'].get('overall_condition', '未知'))
+                    condition = data['status'].get('general_assessment', data['status'].get('general_condition', data['status'].get('overall_condition', '未知')))
                 elif isinstance(data['status'], str):
                     # 从字符串中提取状态信息
                     import re
-                    status_match = re.search(r'general_condition[：:]\s*([^;]+)', data['status'])
-                    if status_match:
-                        condition = status_match.group(1).strip()
-                    else:
-                        # 如果没有找到，尝试提取第一个描述
+                    # 尝试多种模式匹配
+                    status_patterns = [
+                        r'general_assessment[：:]\s*([^;]+)',
+                        r'general_condition[：:]\s*([^;]+)',
+                        r'overall_condition[：:]\s*([^;]+)',
+                        r'整体状况[：:]\s*([^;]+)',
+                        r'保存状态[：:]\s*([^;]+)',
+                    ]
+                    for pattern in status_patterns:
+                        status_match = re.search(pattern, data['status'])
+                        if status_match:
+                            condition = status_match.group(1).strip()
+                            break
+                    
+                    # 如果没有找到，尝试提取第一个描述
+                    if condition == "未知":
                         parts = data['status'].split(';')
                         if parts:
                             condition = parts[0].strip()
