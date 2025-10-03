@@ -162,7 +162,7 @@ const handlePreview = (imgUrl: string, title: string) => {
 };//放大图片
 
 
-
+  const [currentUser, setCurrentUser] = useState<{ id: number } | null>({ id: 1 }); // 暂时用假数据
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingPost, setEditingPost] = useState<PostType | null>(null);
   const [newImages, setNewImages] = useState<File[]>([]); // 新上传的图片
@@ -484,10 +484,14 @@ const handleNewImageUpload = (file: File) => {
             <Button type="text" icon={<MessageOutlined/>} onClick={() => handleComment(post.id)}>
               {post.comments_count}
             </Button>
-            {/* 添加编辑按钮 */}
-            <Button type="text" icon={<EditOutlined/>} onClick={() => handleEdit(post)}>
-              编辑
-            </Button>
+
+
+  {/* 只有帖子作者才能看到编辑按钮 */}
+  {currentUser && post.user_id === currentUser.id && (
+    <Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(post)}>
+      编辑
+    </Button>
+  )}
             <Button type="text" icon={<ShareAltOutlined/>} onClick={() => handleShare(post.id)}>分享</Button>
           </div>
         </Card>

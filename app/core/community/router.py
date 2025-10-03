@@ -307,32 +307,34 @@ async def get_post(post_id: int, db: Session = Depends(get_db)):
     }
 
 from sqlalchemy import func
+
+
 @router.put("/posts/{post_id}", response_model=PostOut)
 async def update_post(
         post_id: int,
-        post_update: PostCreate,  # 使用相同的创建模型来更新
-        # current_user: User = Depends(get_current_user),  # TODO: 添加用户认证
+        post_update: PostCreate,
+        # current_user: User = Depends(get_current_user),  # 取消注释后使用真实用户
         db: Session = Depends(get_db)
 ):
-    """更新帖子内容"""
     try:
-        # 1. 查找帖子
         post = db.query(Post).filter(Post.id == post_id).first()
         if not post:
             raise HTTPException(status_code=404, detail="帖子不存在")
 
-        # TODO: 验证当前用户是帖子作者
+        # 权限验证：只有作者能编辑
         # if post.user_id != current_user.id:
         #     raise HTTPException(status_code=403, detail="无权修改他人帖子")
 
-        # 2. 更新帖子内容
+        # 暂时用假用户ID验证
+        if post.user_id != 1:  # 假设当前用户ID是1
+            raise HTTPException(status_code=403, detail="无权修改他人帖子")
+
         post.title = post_update.title
         post.content = post_update.content
-        post.updated_at = func.now()  # 更新修改时间
+        post.updated_at = func.now()
 
         db.commit()
         db.refresh(post)
-
         return post
 
     except HTTPException:
