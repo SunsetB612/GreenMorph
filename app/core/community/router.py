@@ -1,7 +1,7 @@
 """
 社区功能API路由
 """
-
+API_BASE_URL = "http://localhost:8000"
 from fastapi import APIRouter, UploadFile, File
 from app.database import SessionLocal
 from app.core.community.models import Post
@@ -212,55 +212,70 @@ async def upload_post_image(
 
 @router.post("/comments/{comment_id}/images")
 async def upload_comment_image(
-    comment_id: int,
-    file: UploadFile = File(...),
-    # current_user: User = Depends(get_current_user)  # TODO: 添加用户认证
-    # db: Session = Depends(get_db)  # TODO: 添加数据库依赖
+        comment_id: int,
+        file: UploadFile = File(...),
+        db: Session = Depends(get_db)
 ):
     """上传评论图片"""
-    from app.shared.utils.file_manager import FileManager
-    from app.core.community.image_models import CommunityImage, ImageType
-    from fastapi import HTTPException
-    
-    # 验证文件类型
-    if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
-        raise HTTPException(status_code=400, detail="不支持的图片格式")
-    
-    # 读取文件内容
-    content = await file.read()
-    
-    # 保存文件
-    file_manager = FileManager()
-    userid = "user1"  # TODO: 从认证中获取真实用户ID
-    
-    file_path, public_url = file_manager.save_uploaded_file(
-        content=content,
-        filename=file.filename,
-        userid=userid,
-        category="comments",
-        post_id=str(comment_id)  # 这里用comment_id作为目录名
-    )
-    
-    # TODO: 保存到数据库
-    # community_image = CommunityImage(
-    #     uploader_id=1,  # TODO: 从认证中获取真实用户ID
-    #     original_filename=file.filename,
-    #     file_path=file_path,
-    #     file_size=len(content),
-    #     mime_type=file.content_type,
-    #     image_type=ImageType.COMMENT,
-    #     target_id=comment_id
-    # )
-    # db.add(community_image)
-    # db.commit()
-    
-    return {
-        "message": "评论图片上传成功",
-        "file_path": file_path,
-        "public_url": public_url,
-        "filename": file.filename,
-        "size": len(content)
-    }
+    try:
+        from app.shared.utils.file_manager import FileManager
+        from app.core.community.image_models import CommunityImage, ImageType
+
+        # TODO: 有登录模块后添加用户认证
+        current_user_id = 1
+
+        # 验证评论是否存在
+        comment = db.query(Comment).filter(Comment.id == comment_id).first()
+        if not comment:
+            raise HTTPException(status_code=404, detail="评论不存在")
+
+        # 验证文件类型
+        if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+            raise HTTPException(status_code=400, detail="不支持的图片格式")
+
+        # 验证文件大小（限制5MB）
+        content = await file.read()
+        if len(content) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="图片大小不能超过5MB")
+
+        # 保存文件
+        file_manager = FileManager()
+        file_path, public_url = file_manager.save_uploaded_file(
+            content=content,
+            filename=file.filename,
+            userid=str(current_user_id),
+            category="comments",
+            post_id=str(comment_id)
+        )
+
+        # 保存到数据库
+        community_image = CommunityImage(
+            uploader_id=current_user_id,
+            original_filename=file.filename,
+            file_path=file_path,
+            file_size=len(content),
+            mime_type=file.content_type,
+            image_type=ImageType.COMMENT,
+            target_id=comment_id
+        )
+        db.add(community_image)
+        db.commit()
+        db.refresh(community_image)
+
+        return {
+            "message": "评论图片上传成功",
+            "image_id": community_image.id,
+            "file_path": file_path,
+            "public_url": public_url,
+            "filename": file.filename,
+            "size": len(content)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"上传评论图片失败: {str(e)}")
 
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -392,7 +407,6 @@ from  app.core.community.models import Comment
 # 评论相关
 from sqlalchemy import text
 
-
 @router.get("/posts/{post_id}/comments")
 async def get_comments(
         post_id: int,
@@ -400,48 +414,44 @@ async def get_comments(
         size: int = Query(10, ge=1, le=50),
         db: Session = Depends(get_db)
 ):
-    """获取帖子的评论列表"""
+    """获取评论列表（包含图片）"""
     try:
-        # 使用原始SQL查询 - 最安全稳定
-        sql = """
-        SELECT 
-            c.id, c.post_id, c.user_id, c.content, c.created_at,
-            u.username as user_name
-        FROM comments c
-        LEFT JOIN users u ON c.user_id = u.id
-        WHERE c.post_id = :post_id
-        ORDER BY c.created_at ASC
-        LIMIT :limit OFFSET :offset
-        """
+        # 查询评论（分页）
+        comments_query = db.query(Comment).filter(Comment.post_id == post_id)
+        total = comments_query.count()
 
-        result = db.execute(
-            text(sql),
-            {
-                "post_id": post_id,
-                "limit": size,
-                "offset": (page - 1) * size
-            }
-        )
+        comments = comments_query.order_by(Comment.created_at.asc()) \
+            .offset((page - 1) * size) \
+            .limit(size) \
+            .all()
 
         comments_data = []
-        for row in result:
+        for comment in comments:
+            # 查询用户信息
+            user = db.query(User).filter(User.id == comment.user_id).first()
+
+            # 查询评论的图片
+            images = db.query(CommunityImage).filter(
+                CommunityImage.target_id == comment.id,
+                CommunityImage.image_type == "comment"
+            ).all()
+
+            image_urls = [f"{API_BASE_URL}/{img.file_path}" for img in images]
+
             comment_data = {
-                "id": row.id,
-                "post_id": row.post_id,
-                "user_id": row.user_id,
-                "content": row.content,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-                "user_name": row.user_name or f"用户{row.user_id}",
-                "user_avatar": f"https://api.dicebear.com/7.x/miniavs/svg?seed={row.user_id}"
+                "id": comment.id,
+                "post_id": comment.post_id,
+                "user_id": comment.user_id,
+                "content": comment.content,
+                "created_at": comment.created_at.isoformat() if comment.created_at else None,
+                "user_name": user.username if user else f"用户{comment.user_id}",
+                "user_avatar": f"https://api.dicebear.com/7.x/miniavs/svg?seed={comment.user_id}",
+                "images": image_urls  # 添加图片URL列表
             }
             comments_data.append(comment_data)
 
-        # 获取总数
-        count_sql = "SELECT COUNT(*) FROM comments WHERE post_id = :post_id"
-        total = db.execute(text(count_sql), {"post_id": post_id}).scalar()
-
         return {
-            "total": total or 0,
+            "total": total,
             "page": page,
             "size": size,
             "items": comments_data
@@ -451,10 +461,66 @@ async def get_comments(
         raise HTTPException(status_code=500, detail=f"获取评论失败: {str(e)}")
 
 
+from sqlalchemy.orm import Session
+from app.core.community.models import Post, Comment
+from pydantic import BaseModel
+from app.core.user.models import User
+
+
+class CommentCreate(BaseModel):
+    content: str
+
+
+
 @router.post("/posts/{post_id}/comments")
-async def create_comment(post_id: int):
+async def create_comment(
+        post_id: int,
+        comment_data: CommentCreate,
+        db: Session = Depends(get_db)
+):
     """创建评论"""
-    pass
+    try:
+        # TODO: 有登录模块后改为从token获取当前用户
+        current_user_id = 1
+
+        # 1. 验证帖子是否存在
+        post = db.query(Post).filter(Post.id == post_id).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="帖子不存在")
+
+        # 2. 验证用户是否存在
+        user = db.query(User).filter(User.id == current_user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+
+        # 3. 创建评论
+        new_comment = Comment(
+            post_id=post_id,
+            user_id=current_user_id,
+            content=comment_data.content
+        )
+
+        db.add(new_comment)
+
+        # 4. 更新帖子评论计数
+        post.comments_count = Post.comments_count + 1
+
+        db.commit()
+        db.refresh(new_comment)
+
+        return {
+            "id": new_comment.id,
+            "user_id": current_user_id,
+            "user_name": user.username,  # 从User模型获取
+            "content": comment_data.content,
+            "created_at": new_comment.created_at.isoformat(),
+            "user_avatar": f"https://api.dicebear.com/7.x/miniavs/svg?seed={current_user_id}"
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"创建评论失败: {str(e)}")
+
 
 
 @router.delete("/comments/{comment_id}")

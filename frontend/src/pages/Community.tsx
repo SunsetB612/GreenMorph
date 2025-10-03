@@ -312,6 +312,7 @@ interface CommentType {
   created_at: string;
   user_name: string;
   user_avatar: string;
+  images: string[];
 }
 
   const [comments, setComments] = useState<CommentType[]>([]);
@@ -320,6 +321,8 @@ interface CommentType {
   const [commentLoading, setCommentLoading] = useState(false);
   const [commentPage, setCommentPage] = useState(1);
   const [commentTotal, setCommentTotal] = useState(0);
+
+
 
 // 获取评论列表
 const fetchComments = async (postId: number, page: number = 1) => {
@@ -370,7 +373,74 @@ const loadMoreComments = async () => {
     setCommentLoading(false);
   }
 };
+   const [commentContent, setCommentContent] = useState(''); // 评论输入内容
+  const [submittingComment, setSubmittingComment] = useState(false); // 提交状态
+  // 添加图片相关状态
+const [commentImages, setCommentImages] = useState<File[]>([]);
+const [uploadingImages, setUploadingImages] = useState(false);
+// 创建评论
+const handleSubmitComment = async () => {
+  if (!currentPostId || (!commentContent.trim() && commentImages.length === 0)) {
+    message.warning('请输入评论内容或选择图片');
+    return;
+  }
 
+  setSubmittingComment(true);
+  try {
+    // 1. 先创建评论
+    const commentResponse = await fetch(`${API_BASE_URL}/api/community/posts/${currentPostId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: commentContent.trim()
+      }),
+    });
+
+    if (!commentResponse.ok) throw new Error('评论发布失败');
+    const newComment = await commentResponse.json();
+
+    // 2. 如果有图片，上传图片到评论
+    if (commentImages.length > 0) {
+      setUploadingImages(true);
+      for (const imageFile of commentImages) {
+        const formData = new FormData();
+        formData.append('file', imageFile);
+
+        const uploadResponse = await fetch(
+          `${API_BASE_URL}/api/community/comments/${newComment.id}/images`,
+          {
+            method: 'POST',
+            body: formData,
+          }
+        );
+
+        if (!uploadResponse.ok) {
+          console.error('图片上传失败:', await uploadResponse.text());
+        }
+      }
+      setUploadingImages(false);
+    }
+
+    // 3. 重要：重新获取评论列表，确保包含图片
+    await fetchComments(currentPostId!);
+
+    // 4. 刷新帖子列表的评论数
+    fetchPosts();
+
+    // 5. 清空输入
+    setCommentContent('');
+    setCommentImages([]);
+
+    message.success('评论发布成功！');
+  } catch (error) {
+    console.error('发布评论失败:', error);
+    message.error('评论发布失败');
+  } finally {
+    setSubmittingComment(false);
+  }
+};
 
   const handleLike = (postId: number) => console.log('点赞帖子:', postId);
   // const handleComment = (postId: number) => console.log('评论帖子:', postId);
@@ -561,104 +631,173 @@ const loadMoreComments = async () => {
   {commentLoading && comments.length === 0 ? (
     <div style={{ textAlign: 'center', padding: '40px' }}>加载中...</div>
   ) : (
-    <div>
-      <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '16px' }}>
-        {comments.length > 0 ? (
-          comments.map((comment) => (
-            <div
-              key={comment.id}
-              style={{
-                padding: '12px 0',
-                borderBottom: '1px solid #f0f0f0',
-                display: 'flex',
-                alignItems: 'flex-start'
-              }}
-            >
-              <Avatar
-                size="default"
-                src={comment.user_avatar}
-                style={{ marginRight: '12px' }}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#1890ff' }}>
-                    {comment.user_name}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#999' }}>
-                    {new Date(comment.created_at).toLocaleString()}
-                  </div>
-                </div>
-                <div style={{
-                  fontSize: '14px',
-                  lineHeight: '1.5',
-                  color: '#333',
-                  background: '#f8f9fa',
-                  padding: '8px 12px',
-                  borderRadius: '6px'
-                }}>
-                  {comment.content}
-                </div>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>💬</div>
-            <div>暂无评论</div>
-            <div style={{ fontSize: '12px', marginTop: '8px' }}>成为第一个评论的人吧~</div>
-          </div>
-        )}
-      </div>
-
-      {comments.length > 0 && comments.length < commentTotal && (
-        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-          <Button
-            type="link"
-            onClick={loadMoreComments}
-            loading={commentLoading}
-          >
-            加载更多评论 ({comments.length}/{commentTotal})
-          </Button>
-        </div>
-      )}
-
-      <div style={{
-        borderTop: '1px solid #e8e8e8',
-        paddingTop: '16px',
-      }}>
-        <Space.Compact style={{ width: '100%' }}>
-          <Input
-            placeholder="写下你的评论..."
-            disabled
-            size="large"
-            style={{ flex: 1 }}
+      <div>
+        <div style={{maxHeight: '400px', overflowY: 'auto', marginBottom: '16px'}}>
+          {comments.length > 0 ? (
+              comments.map((comment) => (
+                  <div
+                      key={comment.id}
+                      style={{
+                        padding: '12px 0',
+                        borderBottom: '1px solid #f0f0f0',
+                        display: 'flex',
+                        alignItems: 'flex-start'
+                      }}
+                  >
+                    <Avatar
+                        size="default"
+                        src={comment.user_avatar}
+                        style={{marginRight: '12px'}}
+                    />
+                    <div style={{flex: 1}}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        marginBottom: '6px'
+                      }}>
+                        <div style={{fontWeight: 'bold', fontSize: '14px', color: '#1890ff'}}>
+                          {comment.user_name}
+                        </div>
+                        <div style={{fontSize: '12px', color: '#999'}}>
+                          {new Date(comment.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                      <div style={{
+                        fontSize: '14px',
+                        lineHeight: '1.5',
+                        color: '#333',
+                        background: '#f8f9fa',
+                        padding: '8px 12px',
+                        borderRadius: '6px'
+                      }}>
+                        {comment.content}
+                        {comment.images && comment.images.length > 0 && (
+  <div style={{ marginTop: '8px' }}>
+    <Row gutter={[8, 8]}>
+      {comment.images.map((imgUrl, index) => (
+        <Col key={index} xs={8}>
+          <img
+            src={imgUrl}
+            alt={`评论图片 ${index + 1}`}
+            style={{
+              width: '100%',
+              height: '80px',
+              objectFit: 'cover',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+            onClick={() => handlePreview(imgUrl, '评论图片')}
           />
-          <Button type="primary" disabled size="large">
-            发布
-          </Button>
-        </Space.Compact>
-        <div style={{ fontSize: '12px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
-          评论发布功能开发中...
+        </Col>
+      ))}
+    </Row>
+  </div>
+)}
+                      </div>
+                    </div>
+                  </div>
+              ))
+          ) : (
+              <div style={{textAlign: 'center', padding: '60px 20px', color: '#999'}}>
+                <div style={{fontSize: '48px', marginBottom: '16px'}}>💬</div>
+                <div>暂无评论</div>
+                <div style={{fontSize: '12px', marginTop: '8px'}}>成为第一个评论的人吧~</div>
+              </div>
+          )}
+        </div>
+
+        {comments.length > 0 && comments.length < commentTotal && (
+            <div style={{textAlign: 'center', marginBottom: '16px'}}>
+              <Button
+                  type="link"
+                  onClick={loadMoreComments}
+                  loading={commentLoading}
+              >
+                加载更多评论 ({comments.length}/{commentTotal})
+              </Button>
+            </div>
+        )}
+
+        <div style={{
+          borderTop: '1px solid #e8e8e8',
+          paddingTop: '16px',
+        }}>
+          {/* 图片上传区域 */}
+  <div style={{ marginBottom: '12px' }}>
+    <Upload
+      multiple
+      listType="picture"
+      beforeUpload={(file) => {
+        setCommentImages(prev => [...prev, file]);
+        return false; // 阻止自动上传
+      }}
+      accept="image/jpeg,image/png,image/webp"
+      showUploadList={false}
+    >
+      <Button icon={<UploadOutlined />}>添加图片</Button>
+    </Upload>
+
+    {/* 显示已选择的图片 */}
+    {commentImages.length > 0 && (
+      <div style={{ marginTop: '8px', padding: '8px 12px', background: '#f5f5f5', borderRadius: '4px' }}>
+        <div>📸 已选择 {commentImages.length} 张图片：</div>
+        {commentImages.map((file, index) => (
+          <div key={index} style={{ fontSize: '12px', marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
+            <span>• {file.name}</span>
+            <Button
+              type="link"
+              danger
+              size="small"
+              onClick={() => setCommentImages(prev => prev.filter((_, i) => i !== index))}
+            >
+              删除
+            </Button>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+          <Space.Compact style={{width: '100%'}}>
+            <Input
+                placeholder="写下你的评论..."
+                value={commentContent}
+                onChange={(e) => setCommentContent(e.target.value)}
+                size="large"
+                style={{flex: 1}}
+                onPressEnter={handleSubmitComment}  // 按回车也可以发送
+            />
+            <Button
+                type="primary"
+                size="large"
+                onClick={handleSubmitComment}
+                loading={submittingComment}
+            >
+              发布
+            </Button>
+          </Space.Compact>
         </div>
       </div>
-    </div>
   )}
 </Modal>
-      
+
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={16}>
-          <Tabs activeKey={category} onChange={(key) => { setCategory(key); setPage(1); }}>
+          <Tabs activeKey={category} onChange={(key) => {
+            setCategory(key);
+            setPage(1);
+          }}>
             {['popular', 'latest', 'following'].map(tabKey => (
-              <TabPane
-  tab={tabKey === 'popular' ? '热门' : tabKey === 'latest' ? '最新' : '关注'}
-  key={tabKey}
->
-  {loading ? (
-    <div>加载中...</div>
-  ) : tabKey === 'following' ? (
-    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-      关注的内容将在这里显示
-    </div>
+                <TabPane
+                    tab={tabKey === 'popular' ? '热门' : tabKey === 'latest' ? '最新' : '关注'}
+                    key={tabKey}
+                >
+                  {loading ? (
+                      <div>加载中...</div>
+                  ) : tabKey === 'following' ? (
+                      <div style={{textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)'}}>
+                        关注的内容将在这里显示
+                      </div>
   ) : (
     <>
       {posts.map(post => (
