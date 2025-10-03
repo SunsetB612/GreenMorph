@@ -134,7 +134,8 @@ CREATE TABLE community_images (
     image_type ENUM('post', 'comment') NOT NULL,
     target_id BIGINT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
+
+
     FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_target (image_type, target_id),
     INDEX idx_uploader (uploader_id)

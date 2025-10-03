@@ -24,7 +24,7 @@ from app.shared.models import (
     ErrorResponse, HealthResponse
 )
 from app.core.redesign.redesign_service import RedesignService
-
+from app.core.community.router import router as community_router
 
 # 全局服务实例
 redesign_service = None
@@ -80,7 +80,7 @@ from app.core.redesign import router as redesign_router
 
 # 注册路由
 app.include_router(redesign_router, prefix="/api/redesign", tags=["改造项目"])
-
+app.include_router(community_router, prefix="/api/community", tags=["社区"])
 
 @app.get("/")
 async def root():
@@ -181,7 +181,8 @@ async def get_system_stats(
 
 if __name__ == "__main__":
     import uvicorn
-    
+
+
     logger.info(f"启动 GreenMorph 服务在 {settings.host}:{settings.port}")
     uvicorn.run(
         "app.main:app",
