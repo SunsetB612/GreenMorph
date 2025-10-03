@@ -22,7 +22,6 @@ import {
 } from '@ant-design/icons';
 
 const { Title, Paragraph } = Typography;
-const { TabPane } = Tabs;
 
 const Community: React.FC = () => {
   const [searchValue, setSearchValue] = useState('');
@@ -132,95 +131,112 @@ const Community: React.FC = () => {
       {/* 内容区域 */}
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={16}>
-          <Tabs defaultActiveKey="hot">
-            <TabPane tab="热门" key="hot">
-              {posts.map(post => (
-                <Card 
-                  key={post.id} 
-                  style={{ marginBottom: '16px' }}
-                  hoverable
-                >
-                  <div style={{ marginBottom: '12px' }}>
-                    <Space>
-                      <Avatar src={post.avatar} />
-                      <div>
-                        <div style={{ fontWeight: 'bold' }}>{post.user}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                          <ClockCircleOutlined /> {post.time}
+          <Tabs 
+            defaultActiveKey="hot"
+            items={[
+              {
+                key: 'hot',
+                label: '热门',
+                children: (
+                  <div>
+                    {posts.map(post => (
+                      <Card 
+                        key={post.id} 
+                        style={{ marginBottom: '16px' }}
+                        hoverable
+                      >
+                        <div style={{ marginBottom: '12px' }}>
+                          <Space>
+                            <Avatar src={post.avatar} />
+                            <div>
+                              <div style={{ fontWeight: 'bold' }}>{post.user}</div>
+                              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                <ClockCircleOutlined /> {post.time}
+                              </div>
+                            </div>
+                          </Space>
                         </div>
-                      </div>
-                    </Space>
-                  </div>
 
-                  <Title level={4} style={{ marginBottom: '8px' }}>
-                    {post.title}
-                  </Title>
+                        <Title level={4} style={{ marginBottom: '8px' }}>
+                          {post.title}
+                        </Title>
 
-                  <Paragraph style={{ marginBottom: '12px' }}>
-                    {post.content}
-                  </Paragraph>
+                        <Paragraph style={{ marginBottom: '12px' }}>
+                          {post.content}
+                        </Paragraph>
 
-                  <div style={{ marginBottom: '12px' }}>
-                    <img 
-                      src={post.images[0]} 
-                      alt="post" 
-                      style={{ 
-                        width: '100%', 
-                        maxWidth: '300px',
-                        borderRadius: '8px' 
-                      }} 
-                    />
-                  </div>
+                        <div style={{ marginBottom: '12px' }}>
+                          <img 
+                            src={post.images[0]} 
+                            alt="post" 
+                            style={{ 
+                              width: '100%', 
+                              maxWidth: '300px',
+                              borderRadius: '8px' 
+                            }} 
+                          />
+                        </div>
 
-                  <div style={{ marginBottom: '12px' }}>
-                    {post.tags.map(tag => (
-                      <Tag key={tag} color="blue">{tag}</Tag>
+                        <div style={{ marginBottom: '12px' }}>
+                          {post.tags.map(tag => (
+                            <Tag key={tag} color="blue">{tag}</Tag>
+                          ))}
+                        </div>
+
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          borderTop: '1px solid var(--border-color)',
+                          paddingTop: '12px'
+                        }}>
+                          <Button 
+                            type="text" 
+                            icon={<HeartOutlined />}
+                            onClick={() => handleLike(post.id)}
+                            style={{ color: post.isLiked ? 'var(--error-color)' : 'var(--text-secondary)' }}
+                          >
+                            {post.likes}
+                          </Button>
+                          <Button 
+                            type="text" 
+                            icon={<MessageOutlined />}
+                            onClick={() => handleComment(post.id)}
+                          >
+                            {post.comments}
+                          </Button>
+                          <Button 
+                            type="text" 
+                            icon={<ShareAltOutlined />}
+                            onClick={() => handleShare(post.id)}
+                          >
+                            {post.shares}
+                          </Button>
+                        </div>
+                      </Card>
                     ))}
                   </div>
-
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between',
-                    borderTop: '1px solid var(--border-color)',
-                    paddingTop: '12px'
-                  }}>
-                    <Button 
-                      type="text" 
-                      icon={<HeartOutlined />}
-                      onClick={() => handleLike(post.id)}
-                      style={{ color: post.isLiked ? 'var(--error-color)' : 'var(--text-tertiary)' }}
-                    >
-                      {post.likes}
-                    </Button>
-                    <Button 
-                      type="text" 
-                      icon={<MessageOutlined />}
-                      onClick={() => handleComment(post.id)}
-                    >
-                      {post.comments}
-                    </Button>
-                    <Button 
-                      type="text" 
-                      icon={<ShareAltOutlined />}
-                      onClick={() => handleShare(post.id)}
-                    >
-                      {post.shares}
-                    </Button>
+                )
+              },
+              {
+                key: 'latest',
+                label: '最新',
+                children: (
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                    最新内容加载中...
                   </div>
-                </Card>
-              ))}
-            </TabPane>
-            <TabPane tab="最新" key="latest">
-              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-                最新内容加载中...
-              </div>
-            </TabPane>
-            <TabPane tab="关注" key="following">
-              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
-                关注的内容将在这里显示
-              </div>
-            </TabPane>
-          </Tabs>
+                )
+              },
+              {
+                key: 'following',
+                label: '关注',
+                children: (
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                    关注的内容将在这里显示
+                  </div>
+                )
+              }
+            ]}
+          />
         </Col>
 
         <Col xs={24} lg={8}>

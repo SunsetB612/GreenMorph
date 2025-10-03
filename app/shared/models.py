@@ -6,6 +6,7 @@ GreenMorph 数据模型
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from enum import Enum
+from datetime import datetime
 
 
 class StyleType(str, Enum):
@@ -48,6 +49,7 @@ class ImageAnalysisResponse(BaseModel):
     status: Optional[str] = Field(None, description="状态评估")
     uploaded_file: Optional[str] = Field(None, description="上传的文件名")
     file_path: Optional[str] = Field(None, description="文件保存路径")
+    cloud_url: Optional[str] = Field(None, description="云存储URL")
     input_number: Optional[int] = Field(None, description="输入图片编号")
 
 
@@ -110,3 +112,44 @@ class HealthResponse(BaseModel):
     status: str = Field(description="服务状态")
     version: str = Field(description="版本号")
     timestamp: str = Field(description="时间戳")
+
+
+# 用户认证相关模型
+class UserBase(BaseModel):
+    """用户基础模型"""
+    username: str
+    email: str
+
+
+class UserCreate(UserBase):
+    """用户注册模型"""
+    password: str
+
+
+class UserLogin(BaseModel):
+    """用户登录模型"""
+    email: str
+    password: str
+
+
+class UserResponse(UserBase):
+    """用户响应模型"""
+    id: int
+    bio: Optional[str] = None
+    skill_level: str = 'beginner'
+    points: int = 0
+    is_active: bool = True
+    created_at: datetime
+
+
+class Token(BaseModel):
+    """令牌响应模型"""
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserUpdate(BaseModel):
+    """用户更新模型"""
+    username: Optional[str] = None
+    bio: Optional[str] = None
+    skill_level: Optional[str] = None

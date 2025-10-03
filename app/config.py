@@ -41,8 +41,9 @@ class Settings(BaseSettings):
     
     # 文件存储路径
     static_dir: str = "static"
-    input_dir: str = "static/input"
-    output_dir: str = "static/output"
+    # 注意：不再使用固定的input_dir和output_dir，改为按用户分目录
+    # input_dir: str = "static/input"  # 已废弃
+    # output_dir: str = "static/output"  # 已废弃
     
     # AI模型配置
     tongyi_api_key: Optional[str] = None
@@ -56,6 +57,30 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-3-opus-20240229"
     replicate_api_token: Optional[str] = None
     
+    # Hugging Face API配置
+    huggingface_api_token: Optional[str] = None
+    
+    # 云存储配置
+    imgbb_api_key: Optional[str] = "ff3d6b661dc2c1035dd5bf3754499f8d"  # ImgBB API密钥
+    enable_cloud_storage: bool = True  # 是否启用云存储功能
+    
+    # Web搜索配置
+    google_search_api_key: Optional[str] = None  # Google Search API密钥
+    google_search_engine_id: Optional[str] = None  # Google自定义搜索引擎ID
+    serpapi_key: Optional[str] = None  # SerpAPI密钥（备选方案）
+    enable_web_search: bool = True  # 是否启用网页搜索功能
+    
+    # 国内搜索API配置
+    baidu_search_api_key: Optional[str] = None  # 百度搜索API密钥
+    baidu_search_secret_key: Optional[str] = None  # 百度搜索API密钥
+    bing_search_api_key: Optional[str] = None  # 必应搜索API密钥
+    sogou_search_api_key: Optional[str] = None  # 搜狗搜索API密钥
+    search_priority: str = "baidu,bing,google,serpapi"  # 搜索API优先级
+    
+    # Seedream4(APIYI) 图生图HTTP接口配置
+    seedream_api_base: str = "https://api.apiyi.com"
+    seedream_api_key: Optional[str] = None  # 环境变量SEEDREAM_API_KEY
+
     # 图像生成配置
     image_generation_model: str = "stabilityai/stable-diffusion-xl-base-1.0"
     controlnet_model: str = "lllyasviel/sd-controlnet-canny"
@@ -88,11 +113,5 @@ settings.database_url = (
     f"?charset={settings.mysql_charset}"
 )
 
-# 确保必要的目录存在
-os.makedirs(settings.input_dir, exist_ok=True)
-os.makedirs(settings.output_dir, exist_ok=True)
-os.makedirs(f"{settings.input_dir}/avatars", exist_ok=True)
-os.makedirs(f"{settings.input_dir}/redesign_projects", exist_ok=True)
-os.makedirs(f"{settings.input_dir}/posts", exist_ok=True)
-os.makedirs(f"{settings.output_dir}/redesign_projects", exist_ok=True)
-os.makedirs(f"{settings.output_dir}/steps", exist_ok=True)
+# 确保必要的目录存在（只创建static根目录，用户目录按需创建）
+os.makedirs(settings.static_dir, exist_ok=True)

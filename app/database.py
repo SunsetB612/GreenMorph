@@ -44,9 +44,10 @@ async def init_db():
             InputImage, InputDemand, RedesignProject, 
             RedesignStep, ProjectDetail
         )
-        from app.core.community.models import Post, Comment, Like
-        from app.core.community.image_models import CommunityImage
-        from app.core.gamification.models import Achievement, UserAchievement
+        # 暂时注释掉未实现的模块
+        # from app.core.community.models import Post, Comment, Like
+        # from app.core.community.image_models import CommunityImage
+        # from app.core.gamification.models import Achievement, UserAchievement
         
         # 创建所有表
         Base.metadata.create_all(bind=engine)

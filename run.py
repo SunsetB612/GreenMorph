@@ -13,6 +13,10 @@ from loguru import logger
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 在导入配置前先加载环境变量
+from dotenv import load_dotenv
+load_dotenv()
+
 from app.config import settings
 
 
@@ -46,9 +50,8 @@ def check_environment():
     """检查环境配置"""
     logger.info("检查环境配置...")
     
-    # 检查必要的目录
-    os.makedirs(settings.input_dir, exist_ok=True)
-    os.makedirs(settings.output_dir, exist_ok=True)
+    # 检查必要的目录（只创建static根目录和logs目录）
+    os.makedirs(settings.static_dir, exist_ok=True)
     os.makedirs("logs", exist_ok=True)
     
     # 检查MySQL连接

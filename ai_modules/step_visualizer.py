@@ -508,8 +508,9 @@ class StepVisualizer:
         """保存可视化图像"""
         try:
             import os
-            os.makedirs(settings.output_dir, exist_ok=True)
-            filepath = os.path.join(settings.output_dir, filename)
+            output_dir = "static/users/user1/output"
+            os.makedirs(output_dir, exist_ok=True)
+            filepath = os.path.join(output_dir, filename)
             image.save(filepath, "JPEG", quality=settings.image_quality)
             logger.info(f"可视化图像已保存: {filepath}")
             return filepath
