@@ -33,6 +33,6 @@ class User(Base):
     # 关系定义暂时注释掉，避免循环导入问题
     # redesign_projects = relationship("RedesignProject", back_populates="user", lazy="dynamic")
     # posts = relationship("Post", back_populates="user", lazy="dynamic")
-    # comments = relationship("Comment", back_populates="user", lazy="dynamic")
+    #comments = relationship("Comment", back_populates="user", lazy="dynamic")
     # likes = relationship("Like", back_populates="user", lazy="dynamic")
     # user_achievements = relationship("UserAchievement", back_populates="user", lazy="dynamic")

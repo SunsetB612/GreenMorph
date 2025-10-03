@@ -6,7 +6,7 @@ from sqlalchemy import Column, BigInteger, String, Text, ForeignKey, Integer, JS
 from sqlalchemy.sql import func
 from app.database import Base
 import enum
-
+from sqlalchemy.orm import relationship
 
 class TargetType(str, enum.Enum):
     POST = "post"

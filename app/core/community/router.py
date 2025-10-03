@@ -388,12 +388,67 @@ async def delete_post(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"删除帖子失败: {str(e)}")
 
-
+from  app.core.community.models import Comment
 # 评论相关
+from sqlalchemy import text
+
+
 @router.get("/posts/{post_id}/comments")
-async def get_comments(post_id: int):
+async def get_comments(
+        post_id: int,
+        page: int = Query(1, ge=1),
+        size: int = Query(10, ge=1, le=50),
+        db: Session = Depends(get_db)
+):
     """获取帖子的评论列表"""
-    pass
+    try:
+        # 使用原始SQL查询 - 最安全稳定
+        sql = """
+        SELECT 
+            c.id, c.post_id, c.user_id, c.content, c.created_at,
+            u.username as user_name
+        FROM comments c
+        LEFT JOIN users u ON c.user_id = u.id
+        WHERE c.post_id = :post_id
+        ORDER BY c.created_at ASC
+        LIMIT :limit OFFSET :offset
+        """
+
+        result = db.execute(
+            text(sql),
+            {
+                "post_id": post_id,
+                "limit": size,
+                "offset": (page - 1) * size
+            }
+        )
+
+        comments_data = []
+        for row in result:
+            comment_data = {
+                "id": row.id,
+                "post_id": row.post_id,
+                "user_id": row.user_id,
+                "content": row.content,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "user_name": row.user_name or f"用户{row.user_id}",
+                "user_avatar": f"https://api.dicebear.com/7.x/miniavs/svg?seed={row.user_id}"
+            }
+            comments_data.append(comment_data)
+
+        # 获取总数
+        count_sql = "SELECT COUNT(*) FROM comments WHERE post_id = :post_id"
+        total = db.execute(text(count_sql), {"post_id": post_id}).scalar()
+
+        return {
+            "total": total or 0,
+            "page": page,
+            "size": size,
+            "items": comments_data
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取评论失败: {str(e)}")
 
 
 @router.post("/posts/{post_id}/comments")

@@ -44,12 +44,30 @@ const Community: React.FC = () => {
 const fetchPosts = async () => {
   setLoading(true);
   try {
-    const url =  `${API_BASE_URL}/api/community/posts?category=${category}&page=${page}&size=${size}`;
+    const url = `${API_BASE_URL}/api/community/posts?category=${category}&page=${page}&size=${size}`;
     const res = await fetch(url);
     const data = await res.json();
 
+    // 为每个帖子获取真实的评论数
+    const postsWithRealCommentCount = await Promise.all(
+      (data.items || []).map(async (post:PostType) => {
+        try {
+          const commentRes = await fetch(
+            `${API_BASE_URL}/api/community/posts/${post.id}/comments?page=1&size=1`
+          );
+          const commentData = await commentRes.json();
+          return {
+            ...post,
+            comments_count: commentData.total || 0 // 用评论接口的 total
+          };
+        } catch (error) {
+          console.error(`获取帖子 ${post.id} 评论数失败:`, error);
+          return post; // 失败就保持原样
+        }
+      })
+    );
 
-    setPosts(data.items || []);
+    setPosts(postsWithRealCommentCount);
     setTotal(data.total || 0);
   } catch (error) {
     console.error('请求失败:', error);
@@ -284,10 +302,78 @@ const deletePost = async (postId: number) => {
   }
 };
 
+// 添加评论相关状态 - 放在这里
+  // 定义评论类型
+interface CommentType {
+  id: number;
+  post_id: number;
+  user_id: number;
+  content: string;
+  created_at: string;
+  user_name: string;
+  user_avatar: string;
+}
+
+  const [comments, setComments] = useState<CommentType[]>([]);
+  const [commentModalVisible, setCommentModalVisible] = useState(false);
+  const [currentPostId, setCurrentPostId] = useState<number | null>(null);
+  const [commentLoading, setCommentLoading] = useState(false);
+  const [commentPage, setCommentPage] = useState(1);
+  const [commentTotal, setCommentTotal] = useState(0);
+
+// 获取评论列表
+const fetchComments = async (postId: number, page: number = 1) => {
+  setCommentLoading(true);
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/community/posts/${postId}/comments?page=${page}&size=10`
+    );
+    const data = await response.json();
+
+    setComments(data.items || []);
+    setCommentTotal(data.total || 0);
+  } catch (error) {
+    console.error('获取评论失败:', error);
+    message.error('获取评论失败');
+  } finally {
+    setCommentLoading(false);
+  }
+};
+
+// 点击评论按钮
+const handleComment = (postId: number) => {
+  setCurrentPostId(postId);
+  setCommentModalVisible(true);
+  setCommentPage(1);
+  fetchComments(postId);
+};
+
+// 加载更多评论
+const loadMoreComments = async () => {
+  if (!currentPostId) return;
+
+  const nextPage = commentPage + 1;
+  setCommentLoading(true);
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/community/posts/${currentPostId}/comments?page=${nextPage}&size=10`
+    );
+    const data = await response.json();
+
+    setComments(prev => [...prev, ...(data.items || [])]);
+    setCommentPage(nextPage);
+  } catch (error) {
+    console.error('加载更多评论失败:', error);
+    message.error('加载更多评论失败');
+  } finally {
+    setCommentLoading(false);
+  }
+};
 
 
   const handleLike = (postId: number) => console.log('点赞帖子:', postId);
-  const handleComment = (postId: number) => console.log('评论帖子:', postId);
+  // const handleComment = (postId: number) => console.log('评论帖子:', postId);
   const handleShare = (postId: number) => console.log('分享帖子:', postId);
 
   return (
@@ -458,7 +544,107 @@ const deletePost = async (postId: number) => {
     </Form.Item>
   </Form>
 </Modal>
+      {/* 评论弹窗 - 插入在这里 */}
+<Modal
+  title={`评论 (${commentTotal})`}
+  open={commentModalVisible}
+  onCancel={() => {
+    setCommentModalVisible(false);
+    setCurrentPostId(null);
+    setComments([]);
+    setCommentPage(1);
+  }}
+  footer={null}
+  width={650}
+  destroyOnClose
+>
+  {commentLoading && comments.length === 0 ? (
+    <div style={{ textAlign: 'center', padding: '40px' }}>加载中...</div>
+  ) : (
+    <div>
+      <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '16px' }}>
+        {comments.length > 0 ? (
+          comments.map((comment) => (
+            <div
+              key={comment.id}
+              style={{
+                padding: '12px 0',
+                borderBottom: '1px solid #f0f0f0',
+                display: 'flex',
+                alignItems: 'flex-start'
+              }}
+            >
+              <Avatar
+                size="default"
+                src={comment.user_avatar}
+                style={{ marginRight: '12px' }}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#1890ff' }}>
+                    {comment.user_name}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#999' }}>
+                    {new Date(comment.created_at).toLocaleString()}
+                  </div>
+                </div>
+                <div style={{
+                  fontSize: '14px',
+                  lineHeight: '1.5',
+                  color: '#333',
+                  background: '#f8f9fa',
+                  padding: '8px 12px',
+                  borderRadius: '6px'
+                }}>
+                  {comment.content}
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>💬</div>
+            <div>暂无评论</div>
+            <div style={{ fontSize: '12px', marginTop: '8px' }}>成为第一个评论的人吧~</div>
+          </div>
+        )}
+      </div>
 
+      {comments.length > 0 && comments.length < commentTotal && (
+        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+          <Button
+            type="link"
+            onClick={loadMoreComments}
+            loading={commentLoading}
+          >
+            加载更多评论 ({comments.length}/{commentTotal})
+          </Button>
+        </div>
+      )}
+
+      <div style={{
+        borderTop: '1px solid #e8e8e8',
+        paddingTop: '16px',
+      }}>
+        <Space.Compact style={{ width: '100%' }}>
+          <Input
+            placeholder="写下你的评论..."
+            disabled
+            size="large"
+            style={{ flex: 1 }}
+          />
+          <Button type="primary" disabled size="large">
+            发布
+          </Button>
+        </Space.Compact>
+        <div style={{ fontSize: '12px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
+          评论发布功能开发中...
+        </div>
+      </div>
+    </div>
+  )}
+</Modal>
+      
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={16}>
           <Tabs activeKey={category} onChange={(key) => { setCategory(key); setPage(1); }}>
