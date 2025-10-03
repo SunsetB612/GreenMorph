@@ -344,12 +344,49 @@ async def update_post(
         raise HTTPException(status_code=500, detail=f"更新帖子失败: {str(e)}")
 
 
-
-
 @router.delete("/posts/{post_id}")
-async def delete_post(post_id: int):
+async def delete_post(
+        post_id: int,
+        # current_user: User = Depends(get_current_user),  # TODO: 添加用户认证
+        db: Session = Depends(get_db)
+):
     """删除帖子"""
-    pass
+    try:
+        # 1. 查找帖子
+        post = db.query(Post).filter(Post.id == post_id).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="帖子不存在")
+
+        # 2. 权限验证：只有作者能删除
+        # if post.user_id != current_user.id:
+        #     raise HTTPException(status_code=403, detail="无权删除他人帖子")
+
+        # 暂时用假用户ID验证
+        if post.user_id != 1:  # 假设当前用户ID是1
+            raise HTTPException(status_code=403, detail="无权删除他人帖子")
+
+        # 3. 删除关联的图片记录
+        images = db.query(CommunityImage).filter(
+            CommunityImage.target_id == post_id,
+            CommunityImage.image_type == ImageType.POST
+        ).all()
+
+        for image in images:
+            # TODO: 删除实际图片文件
+            # file_manager.delete_file(image.file_path)
+            db.delete(image)
+
+        # 4. 删除帖子
+        db.delete(post)
+        db.commit()
+
+        return {"message": "帖子删除成功"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"删除帖子失败: {str(e)}")
 
 
 # 评论相关

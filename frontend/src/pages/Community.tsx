@@ -10,7 +10,8 @@ import {
   SearchOutlined, PlusOutlined, HeartOutlined, MessageOutlined, ShareAltOutlined, FireOutlined, ClockCircleOutlined,UploadOutlined
 } from '@ant-design/icons';
 import { EditOutlined } from '@ant-design/icons';
-
+// 添加删除相关状态
+import { DeleteOutlined, ExclamationCircleFilled } from '@ant-design/icons';
 
 const { Title, Paragraph } = Typography;
 const { TabPane } = Tabs;
@@ -234,6 +235,56 @@ const handleNewImageUpload = (file: File) => {
   setNewImages(prev => [...prev, file]);
   return false; // 阻止自动上传
 };
+
+
+
+const { confirm } = Modal;
+
+// 删除帖子函数
+const handleDelete = (post: PostType) => {
+  if (!currentUser) {
+    message.warning('请先登录');
+    return;
+  }
+
+  if (post.user_id !== currentUser.id) {
+    message.error('无权删除他人帖子');
+    return;
+  }
+
+  confirm({
+    title: '确认删除',
+    icon: <ExclamationCircleFilled />,
+    content: '确定要删除这个帖子吗？此操作不可恢复。',
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk() {
+      deletePost(post.id);
+    },
+  });
+};
+
+// 调用删除接口
+const deletePost = async (postId: number) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/community/posts/${postId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      throw new Error('删除失败');
+    }
+
+    message.success('帖子删除成功！');
+    fetchPosts(); // 刷新列表
+  } catch (error) {
+    console.error('删除失败:', error);
+    message.error('删除失败');
+  }
+};
+
+
 
   const handleLike = (postId: number) => console.log('点赞帖子:', postId);
   const handleComment = (postId: number) => console.log('评论帖子:', postId);
@@ -485,12 +536,21 @@ const handleNewImageUpload = (file: File) => {
               {post.comments_count}
             </Button>
 
-
-  {/* 只有帖子作者才能看到编辑按钮 */}
+{/* 只有帖子作者才能看到编辑和删除按钮 */}
   {currentUser && post.user_id === currentUser.id && (
-    <Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(post)}>
-      编辑
-    </Button>
+    <>
+      <Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(post)}>
+        编辑
+      </Button>
+      <Button
+        type="text"
+        danger
+        icon={<DeleteOutlined />}
+        onClick={() => handleDelete(post)}
+      >
+        删除
+      </Button>
+    </>
   )}
             <Button type="text" icon={<ShareAltOutlined/>} onClick={() => handleShare(post.id)}>分享</Button>
           </div>
