@@ -9,6 +9,8 @@ const { TextArea } = Input;
 import {
   SearchOutlined, PlusOutlined, HeartOutlined, MessageOutlined, ShareAltOutlined, FireOutlined, ClockCircleOutlined,UploadOutlined
 } from '@ant-design/icons';
+import { EditOutlined } from '@ant-design/icons';
+
 
 const { Title, Paragraph } = Typography;
 const { TabPane } = Tabs;
@@ -77,7 +79,7 @@ interface CreatePostFormValues {
   images?: UploadFile[];
 }
 
-// 修改函数签名和实现
+// 创建帖子
 const handleCreatePost = async (values: CreatePostFormValues) => {
   setCreateLoading(true);
   console.log('提交的表单值:', values);
@@ -150,7 +152,88 @@ const handleCreatePost = async (values: CreatePostFormValues) => {
     setCreateLoading(false);
   }
 };
+const [previewVisible, setPreviewVisible] = useState(false);
+const [previewImage, setPreviewImage] = useState<string | null>(null);
+const [previewTitle, setPreviewTitle] = useState<string>('');
+const handlePreview = (imgUrl: string, title: string) => {
+  setPreviewImage(`${API_BASE_URL}/${imgUrl}`);
+  setPreviewTitle(title);
+  setPreviewVisible(true);
+};//放大图片
 
+
+
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingPost, setEditingPost] = useState<PostType | null>(null);
+  const [newImages, setNewImages] = useState<File[]>([]); // 新上传的图片
+  const [editForm] = Form.useForm();
+// 获取帖子详情用于编辑
+const fetchPostDetail = async (postId: number) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/community/posts/${postId}`);
+    const data = await response.json();
+    setEditingPost(data);
+
+    // 填充表单
+    editForm.setFieldsValue({
+      title: data.title,
+      content: data.content
+    });
+
+    setEditModalVisible(true);
+  } catch (error) {
+    message.error('获取帖子详情失败');
+  }
+};
+
+// 编辑按钮点击事件
+const handleEdit = (post: PostType) => {
+  // TODO: 检查当前用户是否是帖子作者
+  fetchPostDetail(post.id);
+};
+
+// 编辑帖子函数
+const handleUpdatePost = async (values: CreatePostFormValues) => {
+  if (!editingPost) return;
+
+  try {
+    // 1. 更新帖子文本内容
+    const response = await fetch(`${API_BASE_URL}/api/community/posts/${editingPost.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+
+    if (!response.ok) throw new Error('更新失败');
+
+    // 2. 上传新图片
+    if (newImages.length > 0) {
+      for (const file of newImages) {
+        const formData = new FormData();
+        formData.append('file', file);
+        await fetch(`${API_BASE_URL}/api/community/posts/${editingPost.id}/images`, {
+          method: 'POST',
+          body: formData,
+        });
+      }
+    }
+
+    message.success('更新成功！');
+    setEditModalVisible(false);
+    setEditingPost(null);
+    setNewImages([]);
+    editForm.resetFields();
+    fetchPosts();
+  } catch (error) {
+    message.error('更新失败');
+  }
+};
+
+// 处理新图片上传
+const handleNewImageUpload = (file: File) => {
+  setNewImages(prev => [...prev, file]);
+  return false; // 阻止自动上传
+};
 
   const handleLike = (postId: number) => console.log('点赞帖子:', postId);
   const handleComment = (postId: number) => console.log('评论帖子:', postId);
@@ -243,6 +326,87 @@ const handleCreatePost = async (values: CreatePostFormValues) => {
     </Form.Item>
   </Form>
 </Modal>
+      <Modal
+  title="编辑帖子"
+  open={editModalVisible}
+  onCancel={() => {
+    setEditModalVisible(false);
+    setEditingPost(null);
+    setNewImages([]);
+    editForm.resetFields();
+  }}
+  footer={null}
+  width={700}
+  destroyOnClose
+>
+  <Form form={editForm} layout="vertical" onFinish={handleUpdatePost}>
+    <Form.Item name="title" label="标题" rules={[{ required: true }]}>
+      <Input placeholder="请输入帖子标题" />
+    </Form.Item>
+
+    <Form.Item name="content" label="内容" rules={[{ required: true }]}>
+      <TextArea rows={6} placeholder="请输入帖子内容" showCount maxLength={1000} />
+    </Form.Item>
+
+    {/* 显示现有图片（只读，不能删除） */}
+    {editingPost?.images && editingPost.images.length > 0 && (
+      <Form.Item label="现有图片">
+        <div style={{ fontSize: '12px', color: '#999', marginBottom: 8 }}>
+          当前图片（暂不支持删除）
+        </div>
+        <Row gutter={[8, 8]}>
+          {editingPost.images.map((imgUrl, index) => (
+            <Col key={index} xs={8}>
+              <img
+                src={`${API_BASE_URL}/${imgUrl}`}
+                alt={`现有图片 ${index + 1}`}
+                style={{
+                  width: '100%',
+                  height: '100px',
+                  objectFit: 'cover',
+                  borderRadius: '8px'
+                }}
+              />
+            </Col>
+          ))}
+        </Row>
+      </Form.Item>
+    )}
+
+    {/* 上传新图片 */}
+    <Form.Item label="添加新图片">
+      <Upload
+        multiple
+        listType="picture"
+        beforeUpload={(file) => {
+          setNewImages(prev => [...prev, file]);
+          return false; // 阻止自动上传
+        }}
+        accept="image/jpeg,image/png,image/webp"
+        showUploadList={false}
+      >
+        <Button icon={<UploadOutlined />}>选择新图片</Button>
+      </Upload>
+      {newImages.length > 0 && (
+        <div style={{ marginTop: 8, padding: '8px 12px', background: '#f5f5f5', borderRadius: '4px' }}>
+          <div>📸 已选择 {newImages.length} 张新图片：</div>
+          {newImages.map((file, index) => (
+            <div key={index} style={{ fontSize: '12px', marginTop: 4 }}>
+              • {file.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </Form.Item>
+
+    <Form.Item style={{ textAlign: 'right', marginBottom: 0 }}>
+      <Space>
+        <Button onClick={() => setEditModalVisible(false)}>取消</Button>
+        <Button type="primary" htmlType="submit">更新帖子</Button>
+      </Space>
+    </Form.Item>
+  </Form>
+</Modal>
 
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={16}>
@@ -277,57 +441,77 @@ const handleCreatePost = async (values: CreatePostFormValues) => {
           <Title level={4} style={{ marginBottom: '8px' }}>{post.title}</Title>
           <Paragraph style={{ marginBottom: '12px' }}>{post.content}</Paragraph>
           {/* 显示图片 */}
-{post.images && post.images.length > 0 && (
-  <div style={{ marginBottom: '12px' }}>
-    <Row gutter={[8, 8]}>
-      {post.images.map((imgUrl, index) => (
-        <Col key={index} xs={8}>
-          <img
-            src={`${API_BASE_URL}/${imgUrl}`}
-            alt={`帖子图片 ${index + 1}`}
-            style={{
-              width: '100%',
-              height: '100px',
-              objectFit: 'cover',
-              borderRadius: '8px'
-            }}
-          />
-        </Col>
-      ))}
-    </Row>
-  </div>
-)}
-          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-            <Button type="text" icon={<HeartOutlined />} onClick={() => handleLike(post.id)}>
+{post.images?.map((imgUrl, index) => (
+  <Col key={index} xs={8}>
+    <img
+      src={`${API_BASE_URL}/${imgUrl}`}
+      alt={`帖子图片 ${index + 1}`}
+      style={{
+        width: '100%',
+        height: '100px',
+        objectFit: 'cover',
+        borderRadius: '8px',
+        cursor: 'pointer'
+      }}
+      onClick={() => handlePreview(imgUrl, post.title)}
+    />
+  </Col>
+))}
+<Modal
+  visible={previewVisible}
+  title={previewTitle}
+  footer={null}
+  onCancel={() => setPreviewVisible(false)}
+>
+  {previewImage && (
+    <img
+      alt={previewTitle}
+      style={{ width: '100%' }}
+      src={previewImage}
+    />
+  )}
+</Modal>
+
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            borderTop: '1px solid var(--border-color)',
+            paddingTop: '12px'
+          }}>
+            <Button type="text" icon={<HeartOutlined/>} onClick={() => handleLike(post.id)}>
               {post.likes_count}
             </Button>
-            <Button type="text" icon={<MessageOutlined />} onClick={() => handleComment(post.id)}>
+            <Button type="text" icon={<MessageOutlined/>} onClick={() => handleComment(post.id)}>
               {post.comments_count}
             </Button>
-            <Button type="text" icon={<ShareAltOutlined />} onClick={() => handleShare(post.id)}>分享</Button>
+            {/* 添加编辑按钮 */}
+            <Button type="text" icon={<EditOutlined/>} onClick={() => handleEdit(post)}>
+              编辑
+            </Button>
+            <Button type="text" icon={<ShareAltOutlined/>} onClick={() => handleShare(post.id)}>分享</Button>
           </div>
         </Card>
       ))}
 
       {/* 分页器 */}
       <Pagination
-        current={page}
-        pageSize={size}
-        total={total}
-        onChange={(p) => setPage(p)}
-        style={{ marginTop: '16px', textAlign: 'center' }}
+          current={page}
+          pageSize={size}
+          total={total}
+          onChange={(p) => setPage(p)}
+          style={{marginTop: '16px', textAlign: 'center'}}
       />
     </>
   )}
-</TabPane>
+              </TabPane>
 
             ))}
           </Tabs>
         </Col>
 
         <Col xs={24} lg={8}>
-          <Card title="热门话题" style={{ marginBottom: '24px' }}>
-            <Space direction="vertical" style={{ width: '100%' }}>
+          <Card title="热门话题" style={{marginBottom: '24px'}}>
+            <Space direction="vertical" style={{width: '100%'}}>
               {['#旧物改造', '#环保生活', '#创意手工', '#收纳整理', '#DIY教程'].map(tag => <Tag key={tag}>{tag}</Tag>)}
             </Space>
           </Card>

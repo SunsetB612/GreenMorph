@@ -263,16 +263,85 @@ async def upload_comment_image(
     }
 
 
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.core.community.models import Post
+from app.core.community.image_models import CommunityImage, ImageType
+from app.core.user.models import User
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.core.community.models import Post
+from app.core.community.image_models import CommunityImage, ImageType
+
+
+
 @router.get("/posts/{post_id}")
 async def get_post(post_id: int, db: Session = Depends(get_db)):
-    """获取单个帖子详情"""
-    pass
+    """
+    获取单个帖子详情，用于更新/删除操作。
+    返回帖子标题、内容、图片列表。
+    """
+    # 1. 获取帖子
+    post = db.query(Post).filter(Post.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="帖子不存在")
+
+    # 2. 获取帖子关联图片
+    images = db.query(CommunityImage).filter(
+        CommunityImage.target_id == post.id,
+        CommunityImage.image_type == ImageType.POST
+    ).all()
+
+    # 3. 返回可编辑信息给前端
+    return {
+        "id": post.id,
+        "title": post.title,
+        "content": post.content,
+        "images": [img.file_path for img in images],  # 只返回 file_path，前端可拼接完整 URL
+        "created_at": post.created_at.isoformat() if post.created_at else None,
+        "updated_at": post.updated_at.isoformat() if post.updated_at else None,
+        "user_id": post.user_id
+    }
+
+from sqlalchemy import func
+@router.put("/posts/{post_id}", response_model=PostOut)
+async def update_post(
+        post_id: int,
+        post_update: PostCreate,  # 使用相同的创建模型来更新
+        # current_user: User = Depends(get_current_user),  # TODO: 添加用户认证
+        db: Session = Depends(get_db)
+):
+    """更新帖子内容"""
+    try:
+        # 1. 查找帖子
+        post = db.query(Post).filter(Post.id == post_id).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="帖子不存在")
+
+        # TODO: 验证当前用户是帖子作者
+        # if post.user_id != current_user.id:
+        #     raise HTTPException(status_code=403, detail="无权修改他人帖子")
+
+        # 2. 更新帖子内容
+        post.title = post_update.title
+        post.content = post_update.content
+        post.updated_at = func.now()  # 更新修改时间
+
+        db.commit()
+        db.refresh(post)
+
+        return post
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"更新帖子失败: {str(e)}")
 
 
-@router.put("/posts/{post_id}")
-async def update_post(post_id: int):
-    """更新帖子"""
-    pass
 
 
 @router.delete("/posts/{post_id}")
