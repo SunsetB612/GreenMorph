@@ -442,6 +442,33 @@ const handleSubmitComment = async () => {
   }
 };
 
+// 删除评论函数
+const deleteComment = async (commentId: number) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/community/comments/${commentId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      throw new Error('删除评论失败');
+    }
+
+    const result = await response.json();
+
+    // 从评论列表中移除已删除的评论
+    setComments(prev => prev.filter(comment => comment.id !== commentId));
+    setCommentTotal(prev => prev - 1);
+
+    // 刷新帖子列表的评论数
+    fetchPosts();
+
+    message.success('评论删除成功！');
+  } catch (error) {
+    console.error('删除评论失败:', error);
+    message.error('删除评论失败');
+  }
+};
+
   const handleLike = (postId: number) => console.log('点赞帖子:', postId);
   // const handleComment = (postId: number) => console.log('评论帖子:', postId);
   const handleShare = (postId: number) => console.log('分享帖子:', postId);
@@ -662,6 +689,28 @@ const handleSubmitComment = async () => {
                         <div style={{fontSize: '12px', color: '#999'}}>
                           {new Date(comment.created_at).toLocaleString()}
                         </div>
+                        {/* 删除按钮 - 只有评论作者能看到 */}
+                  {currentUser && comment.user_id === currentUser.id && (
+                    <Button
+                      type="link"
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      onClick={() => {
+                        Modal.confirm({
+                          title: '确认删除',
+                          icon: <ExclamationCircleFilled />,
+                          content: '确定要删除这条评论吗？',
+                          okText: '确认删除',
+                          okType: 'danger',
+                          cancelText: '取消',
+                          onOk: () => deleteComment(comment.id),
+                        });
+                      }}
+                    >
+                      删除
+                    </Button>
+                  )}
                       </div>
                       <div style={{
                         fontSize: '14px',

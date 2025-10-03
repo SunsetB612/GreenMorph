@@ -466,12 +466,8 @@ from app.core.community.models import Post, Comment
 from pydantic import BaseModel
 from app.core.user.models import User
 
-
 class CommentCreate(BaseModel):
     content: str
-
-
-
 @router.post("/posts/{post_id}/comments")
 async def create_comment(
         post_id: int,
@@ -522,11 +518,55 @@ async def create_comment(
         raise HTTPException(status_code=500, detail=f"创建评论失败: {str(e)}")
 
 
+from fastapi import HTTPException, Depends
+from sqlalchemy.orm import Session
+from app.database import get_db  # 根据你的实际路径调整
+from app.core.community.models import Comment, Post
+
 
 @router.delete("/comments/{comment_id}")
-async def delete_comment(comment_id: int):
+async def delete_comment(
+        comment_id: int,
+        db: Session = Depends(get_db)
+):
     """删除评论"""
-    pass
+    try:
+        # TODO: 有登录模块后改为从token获取当前用户
+        current_user_id = 1
+
+        # 1. 验证评论是否存在
+        comment = db.query(Comment).filter(Comment.id == comment_id).first()
+        if not comment:
+            raise HTTPException(status_code=404, detail="评论不存在")
+
+        # 2. 验证用户权限（只能删除自己的评论）
+        if comment.user_id != current_user_id:
+            raise HTTPException(status_code=403, detail="无权删除他人评论")
+
+        # 3. 获取评论所属的帖子ID（用于更新计数）
+        post_id = comment.post_id
+
+        # 4. 删除评论
+        db.delete(comment)
+
+        # 5. 更新帖子的评论计数
+        post = db.query(Post).filter(Post.id == post_id).first()
+        if post and post.comments_count > 0:
+            post.comments_count = Post.comments_count - 1
+
+        db.commit()
+
+        return {
+            "message": "评论删除成功",
+            "comment_id": comment_id,
+            "post_id": post_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"删除评论失败: {str(e)}")
 
 
 # 点赞相关
