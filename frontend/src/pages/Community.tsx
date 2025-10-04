@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-
+import {
+  HeartFilled  // 添加这个
+} from '@ant-design/icons';
 import {
   Card, Input, Button, Typography, Space, Tag, Avatar, Row, Col, Tabs, message,Upload
 } from 'antd';
@@ -26,6 +28,7 @@ interface PostType {
   created_at: string;
   updated_at: string;
   images?: string[]; // 添加图片URL数组
+  is_liked?: boolean; // 添加点赞状态字段
 }
 
 const Community: React.FC = () => {
@@ -48,26 +51,42 @@ const fetchPosts = async () => {
     const res = await fetch(url);
     const data = await res.json();
 
-    // 为每个帖子获取真实的评论数
-    const postsWithRealCommentCount = await Promise.all(
-      (data.items || []).map(async (post:PostType) => {
+    // 为每个帖子获取评论数和点赞状态
+    const postsWithRealData = await Promise.all(
+      (data.items || []).map(async (post: PostType) => {
         try {
+          // 获取评论数
           const commentRes = await fetch(
             `${API_BASE_URL}/api/community/posts/${post.id}/comments?page=1&size=1`
           );
           const commentData = await commentRes.json();
+
+          // 获取点赞状态
+          const likeStatusRes = await fetch(
+            `${API_BASE_URL}/api/community/posts/${post.id}/like/status`
+          );
+          if (likeStatusRes.ok) {
+            const likeStatusData = await likeStatusRes.json();
+            return {
+              ...post,
+              comments_count: commentData.total || 0,
+              is_liked: likeStatusData.is_liked
+            };
+          }
+
           return {
             ...post,
-            comments_count: commentData.total || 0 // 用评论接口的 total
+            comments_count: commentData.total || 0,
+            is_liked: false
           };
         } catch (error) {
-          console.error(`获取帖子 ${post.id} 评论数失败:`, error);
-          return post; // 失败就保持原样
+          console.error(`获取帖子 ${post.id} 数据失败:`, error);
+          return { ...post, is_liked: false };
         }
       })
     );
 
-    setPosts(postsWithRealCommentCount);
+    setPosts(postsWithRealData);
     setTotal(data.total || 0);
   } catch (error) {
     console.error('请求失败:', error);
@@ -469,8 +488,45 @@ const deleteComment = async (commentId: number) => {
   }
 };
 
-  const handleLike = (postId: number) => console.log('点赞帖子:', postId);
-  // const handleComment = (postId: number) => console.log('评论帖子:', postId);
+
+// 添加点赞状态管理
+const [likeStatus, setLikeStatus] = useState<{[postId: number]: boolean}>({});
+
+// 智能点赞函数
+const handleLike = async (postId: number) => {
+  try {
+    const currentPost = posts.find(post => post.id === postId);
+    const isCurrentlyLiked = currentPost?.is_liked || false;
+    const method = isCurrentlyLiked ? 'DELETE' : 'POST';
+
+    const response = await fetch(`${API_BASE_URL}/api/community/posts/${postId}/like`, {
+      method: method,
+    });
+
+    if (!response.ok) {
+      throw new Error('操作失败');
+    }
+
+    const result = await response.json();
+
+    // 更新帖子列表中的状态
+    setPosts(prev => prev.map(post =>
+      post.id === postId
+        ? {
+            ...post,
+            likes_count: result.likes_count,
+            is_liked: !isCurrentlyLiked
+          }
+        : post
+    ));
+
+    message.success(result.message);
+  } catch (error) {
+    console.error('操作失败:', error);
+    message.error('操作失败');
+  }
+};
+
   const handleShare = (postId: number) => console.log('分享帖子:', postId);
 
   return (
@@ -903,9 +959,18 @@ const deleteComment = async (commentId: number) => {
             borderTop: '1px solid var(--border-color)',
             paddingTop: '12px'
           }}>
-            <Button type="text" icon={<HeartOutlined/>} onClick={() => handleLike(post.id)}>
-              {post.likes_count}
-            </Button>
+
+
+<Button
+  type="text"
+  icon={post.is_liked ? <HeartFilled /> : <HeartOutlined />}
+  onClick={() => handleLike(post.id)}
+  style={{
+    color: post.is_liked ? '#ff4d4f' : 'inherit'
+  }}
+>
+  {post.likes_count}
+</Button>
             <Button type="text" icon={<MessageOutlined/>} onClick={() => handleComment(post.id)}>
               {post.comments_count}
             </Button>

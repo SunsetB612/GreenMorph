@@ -44,6 +44,6 @@ class Like(Base):
     
     id = Column(BigInteger, primary_key=True, index=True)
     user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
-    target_type = Column(Enum(TargetType), nullable=False)
+    target_type = Column(Enum("post","comment",name="targettype"), nullable=False)
     target_id = Column(BigInteger, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -569,18 +569,128 @@ async def delete_comment(
         raise HTTPException(status_code=500, detail=f"删除评论失败: {str(e)}")
 
 
+from fastapi import HTTPException, Depends
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.core.community.models import Post, Like,TargetType
+
 # 点赞相关
 @router.post("/posts/{post_id}/like")
-async def like_post(post_id: int):
+async def like_post(
+        post_id: int,
+        db: Session = Depends(get_db)
+):
     """点赞帖子"""
-    pass
+    try:
+        current_user_id = 1
 
+        # 1. 验证帖子是否存在
+        post = db.query(Post).filter(Post.id == post_id).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="帖子不存在")
 
+        # 2. 检查是否已经点赞
+        existing_like = db.query(Like).filter(
+            Like.user_id == current_user_id,
+            Like.target_type == TargetType.POST,
+            Like.target_id == post_id
+        ).first()
+
+        if existing_like:
+            raise HTTPException(status_code=400, detail="已经点赞过该帖子")
+
+        # 3. 执行点赞
+        new_like = Like(
+            user_id=current_user_id,
+            target_type=TargetType.POST,
+            target_id=post_id
+        )
+        db.add(new_like)
+        post.likes_count = Post.likes_count + 1
+
+        db.commit()
+
+        return {
+            "message": "点赞成功",
+            "post_id": post_id,
+            "likes_count": post.likes_count,
+            "user_id": current_user_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"点赞失败: {str(e)}")
+
+from app.core.community.models import Post, Like,TargetType
 @router.delete("/posts/{post_id}/like")
-async def unlike_post(post_id: int):
+async def unlike_post(
+    post_id: int,
+    db: Session = Depends(get_db)
+):
     """取消点赞帖子"""
-    pass
+    try:
+        current_user_id = 1
 
+        # 1. 验证帖子是否存在
+        post = db.query(Post).filter(Post.id == post_id).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="帖子不存在")
+
+        # 2. 检查是否已经点赞
+        existing_like = db.query(Like).filter(
+            Like.user_id == current_user_id,
+            Like.target_type == TargetType.POST,
+            Like.target_id == post_id
+        ).first()
+
+        if not existing_like:
+            raise HTTPException(status_code=400, detail="尚未点赞该帖子")
+
+        # 3. 执行取消点赞
+        db.delete(existing_like)
+        post.likes_count = post.likes_count - 1
+
+        db.commit()
+
+        return {
+            "message": "取消点赞成功",
+            "post_id": post_id,
+            "likes_count": post.likes_count,
+            "user_id": current_user_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"取消点赞失败: {str(e)}")
+
+
+@router.get("/posts/{post_id}/like/status")
+async def get_like_status(
+        post_id: int,
+        db: Session = Depends(get_db)
+):
+    """获取当前用户对帖子的点赞状态"""
+    try:
+        current_user_id = 1
+
+        existing_like = db.query(Like).filter(
+            Like.user_id == current_user_id,
+            Like.target_type == "POST",
+            Like.target_id == post_id
+        ).first()
+
+        return {
+            "is_liked": existing_like is not None,
+            "post_id": post_id,
+            "user_id": current_user_id
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询点赞状态失败: {str(e)}")
 
 @router.post("/comments/{comment_id}/like")
 async def like_comment(comment_id: int):
