@@ -1,0 +1,131 @@
+.home-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  color: #1e293b;
+  padding: 0;
+  margin: 0;
+}
+
+.hero-section {
+  text-align: center;
+  padding: 70px 2rem 50px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.hero-title {
+  font-size: 3.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: #0f172a;
+  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.8);
+}
+
+.hero-subtitle {
+  font-size: 1.5rem;
+  margin-bottom: 3rem;
+  color: #334155;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+  font-weight: 500;
+}
+
+.hero-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.8rem;
+  margin-bottom: 2.5rem;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.feature-item {
+  background: rgba(255, 255, 255, 0.95);
+  padding: 1.8rem;
+  border-radius: 15px;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  color: #0f172a;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.feature-item:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 30px rgba(34, 197, 94, 0.3);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.feature-icon {
+  font-size: 2.8rem;
+  margin-bottom: 1rem;
+}
+
+.feature-item h3 {
+  font-size: 1.3rem;
+  margin-bottom: 1rem;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.feature-item p {
+  color: #475569;
+  line-height: 1.6;
+  font-weight: 400;
+  font-size: 0.95rem;
+}
+
+.cta-button {
+  background: linear-gradient(45deg, #22c55e, #16a34a);
+  color: white;
+  border: none;
+  padding: 15px 40px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
+}
+
+.cta-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.6);
+}
+
+.welcome-message {
+  font-size: 1.1rem;
+  color: #22c55e;
+  margin-top: 2rem;
+  font-weight: 500;
+}
+
+.welcome-message p {
+  margin: 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: 2.5rem;
+  }
+  
+  .hero-subtitle {
+    font-size: 1.2rem;
+  }
+  
+  .hero-features {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .feature-item {
+    padding: 1.2rem;
+  }
+  
+  .cta-button {
+    padding: 12px 30px;
+    font-size: 1rem;
+  }
+}

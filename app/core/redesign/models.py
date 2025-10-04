@@ -2,7 +2,7 @@
 改造项目数据模型
 """
 
-from sqlalchemy import Column, BigInteger, String, ForeignKey, Integer, Text, DateTime
+from sqlalchemy import Column, BigInteger, String, ForeignKey, Integer, Text, DateTime, Boolean
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -17,6 +17,13 @@ class InputImage(Base):
     input_image_path = Column(String(500), nullable=False)
     input_image_size = Column(Integer)
     mime_type = Column(String(100))
+    
+    # 云存储URL（新增字段）
+    cloud_url = Column(String(500))  # 云存储的公开URL
+    
+    # 图片分析结果缓存
+    analysis_result = Column(Text)  # JSON格式存储分析结果
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

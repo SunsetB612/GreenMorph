@@ -16,6 +16,7 @@ import { EditOutlined } from '@ant-design/icons';
 import { DeleteOutlined, ExclamationCircleFilled } from '@ant-design/icons';
 
 const { Title, Paragraph } = Typography;
+<<<<<<< HEAD
 const { TabPane } = Tabs;
 const API_BASE_URL = 'http://localhost:8000';
 interface PostType {
@@ -30,6 +31,8 @@ interface PostType {
   images?: string[]; // 添加图片URL数组
   is_liked?: boolean; // 添加点赞状态字段
 }
+=======
+>>>>>>> upstream/main
 
 const Community: React.FC = () => {
   const [searchValue, setSearchValue] = useState('');
@@ -888,6 +891,7 @@ const handleLike = async (postId: number) => {
 
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={16}>
+<<<<<<< HEAD
           <Tabs activeKey={category} onChange={(key) => {
             setCategory(key);
             setPage(1);
@@ -1010,6 +1014,114 @@ const handleLike = async (postId: number) => {
 
             ))}
           </Tabs>
+=======
+          <Tabs 
+            defaultActiveKey="hot"
+            items={[
+              {
+                key: 'hot',
+                label: '热门',
+                children: (
+                  <div>
+                    {posts.map(post => (
+                      <Card 
+                        key={post.id} 
+                        style={{ marginBottom: '16px' }}
+                        hoverable
+                      >
+                        <div style={{ marginBottom: '12px' }}>
+                          <Space>
+                            <Avatar src={post.avatar} />
+                            <div>
+                              <div style={{ fontWeight: 'bold' }}>{post.user}</div>
+                              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                <ClockCircleOutlined /> {post.time}
+                              </div>
+                            </div>
+                          </Space>
+                        </div>
+
+                        <Title level={4} style={{ marginBottom: '8px' }}>
+                          {post.title}
+                        </Title>
+
+                        <Paragraph style={{ marginBottom: '12px' }}>
+                          {post.content}
+                        </Paragraph>
+
+                        <div style={{ marginBottom: '12px' }}>
+                          <img 
+                            src={post.images[0]} 
+                            alt="post" 
+                            style={{ 
+                              width: '100%', 
+                              maxWidth: '300px',
+                              borderRadius: '8px' 
+                            }} 
+                          />
+                        </div>
+
+                        <div style={{ marginBottom: '12px' }}>
+                          {post.tags.map(tag => (
+                            <Tag key={tag} color="blue">{tag}</Tag>
+                          ))}
+                        </div>
+
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          borderTop: '1px solid var(--border-color)',
+                          paddingTop: '12px'
+                        }}>
+                          <Button 
+                            type="text" 
+                            icon={<HeartOutlined />}
+                            onClick={() => handleLike(post.id)}
+                            style={{ color: post.isLiked ? 'var(--error-color)' : 'var(--text-secondary)' }}
+                          >
+                            {post.likes}
+                          </Button>
+                          <Button 
+                            type="text" 
+                            icon={<MessageOutlined />}
+                            onClick={() => handleComment(post.id)}
+                          >
+                            {post.comments}
+                          </Button>
+                          <Button 
+                            type="text" 
+                            icon={<ShareAltOutlined />}
+                            onClick={() => handleShare(post.id)}
+                          >
+                            {post.shares}
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )
+              },
+              {
+                key: 'latest',
+                label: '最新',
+                children: (
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                    最新内容加载中...
+                  </div>
+                )
+              },
+              {
+                key: 'following',
+                label: '关注',
+                children: (
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                    关注的内容将在这里显示
+                  </div>
+                )
+              }
+            ]}
+          />
+>>>>>>> upstream/main
         </Col>
 
         <Col xs={24} lg={8}>

@@ -4,7 +4,8 @@ import Home from './pages/Home';
 import AIAssistant from './pages/AIAssistant';
 import Community from './pages/Community';
 import Profile from './pages/Profile';
-import About from './pages/About';
+import AuthPage from './pages/AuthPage';
+import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 import './styles/global.css';
 
@@ -15,10 +16,10 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/ai-assistant" element={<AIAssistant />} />
-          <Route path="/community" element={<Community />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/about" element={<About />} />
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/ai-assistant" element={<ProtectedRoute><AIAssistant /></ProtectedRoute>} />
+          <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         </Routes>
       </Layout>
     </Router>

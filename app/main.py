@@ -10,6 +10,10 @@ from contextlib import asynccontextmanager
 from typing import List, Optional
 from pathlib import Path
 
+# 在导入其他模块前先加载环境变量
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -66,7 +70,7 @@ app.add_middleware(
 
 # 静态文件服务
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/output", StaticFiles(directory=settings.output_dir), name="output")
+# 注意：不再需要单独的/output挂载，所有文件都通过/static访问
 
 
 def get_redesign_service() -> RedesignService:
@@ -77,10 +81,16 @@ def get_redesign_service() -> RedesignService:
 
 # 导入路由
 from app.core.redesign import router as redesign_router
+from app.core.user.router import router as auth_router
 
 # 注册路由
 app.include_router(redesign_router, prefix="/api/redesign", tags=["改造项目"])
+<<<<<<< HEAD
 app.include_router(community_router, prefix="/api/community", tags=["社区"])
+=======
+app.include_router(auth_router, prefix="/api/auth", tags=["用户认证"])
+
+>>>>>>> upstream/main
 
 @app.get("/")
 async def root():
@@ -158,7 +168,7 @@ async def get_system_info():
         "app_name": settings.app_name,
         "version": settings.app_version,
         "debug": settings.debug,
-        "output_dir": settings.output_dir,
+        "static_dir": settings.static_dir,
         "max_file_size": settings.max_file_size,
         "supported_formats": settings.allowed_image_types
     }

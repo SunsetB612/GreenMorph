@@ -15,6 +15,7 @@ from app.core.redesign.redesign_service import RedesignService
 from app.core.redesign.models import InputImage
 from app.database import get_db
 from app.config import settings
+from app.core.security import get_current_user
 
 router = APIRouter()
 
@@ -38,7 +39,8 @@ def get_redesign_service() -> RedesignService:
 async def analyze_image(
     file: UploadFile = File(...),
     service: RedesignService = Depends(get_redesign_service),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """
     分析上传的旧物图片
@@ -62,9 +64,9 @@ async def analyze_image(
         # 调用分析服务
         result = await service.analyze_image_direct(content)
         
-        # 保存上传的图片到用户专属目录
-        # 注意：这里暂时使用userid="user1"，实际应用中应该从认证中获取用户ID
-        userid = "user1"  # TODO: 从认证中获取真实用户ID
+        # 保存上传的图片到用户专属目录（本地+云存储）
+        userid = f"user{current_user['id']}"
+        logger.info(f"🔍 图片分析用户ID: {userid}")
         
         # 根据分析结果生成有意义的文件名前缀（英文）
         main_objects = result.main_objects
@@ -96,28 +98,33 @@ async def analyze_image(
         else:
             prefix = "unknown_item"
         
-        file_path, public_url = service.file_manager.save_uploaded_file(
+        # 使用新的云存储保存方法
+        file_path, public_url, cloud_url = await service.file_manager.save_uploaded_file_with_cloud(
             content, file.filename, userid, prefix=prefix, category="input"
         )
         
-        # 保存图片信息到数据库
+        # 保存图片信息到数据库，包括分析结果和云存储URL
+        import json
         input_image = InputImage(
-            user_id=1,  # TODO: 从认证中获取真实用户ID
+            user_id=current_user['id'],
             original_filename=file.filename,
             input_image_path=file_path,
             input_image_size=len(content),
-            mime_type=file.content_type
+            mime_type=file.content_type,
+            cloud_url=cloud_url,  # 保存云存储URL
+            analysis_result=json.dumps(result.dict(), ensure_ascii=False)  # 保存分析结果
         )
         
         db.add(input_image)
         db.commit()
         db.refresh(input_image)
         
-        logger.info(f"图片信息已保存到数据库，ID: {input_image.id}")
+        logger.info(f"图片信息和分析结果已保存到数据库，ID: {input_image.id}")
         
         # 更新结果中的文件信息
         result.uploaded_file = file.filename
         result.file_path = file_path
+        result.cloud_url = cloud_url  # 添加云存储URL
         result.input_number = input_image.id  # 使用数据库ID作为输入编号
         
         logger.info(f"图片分析完成: {file.filename}")
@@ -139,7 +146,8 @@ async def generate_redesign(
     request: RedesignRequest,
     background_tasks: BackgroundTasks,
     service: RedesignService = Depends(get_redesign_service),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """
     生成再设计方案
@@ -164,11 +172,14 @@ async def generate_redesign(
             request.image_url = input_image.input_image_path
             logger.info(f"使用已上传的图片: {input_image.original_filename}")
         
-        # 调用再设计服务
-        result = await service.redesign_item(request, db)
+        # 调用再设计服务，传递用户ID
+        logger.info(f"🔍 当前用户信息: {current_user}")
+        user_id = f"user{current_user['id']}"
+        logger.info(f"🔍 生成的用户ID: {user_id}")
+        result = await service.redesign_item(request, db, user_id)
         
-        # 后台任务：保存结果到数据库
-        background_tasks.add_task(service.save_redesign_result, result, db)
+        # 后台任务：保存结果到数据库（包含用户需求与图片关联）
+        background_tasks.add_task(service.save_redesign_result, result, db, request, current_user['id'])
         
         logger.info(f"再设计方案生成完成")
         return result

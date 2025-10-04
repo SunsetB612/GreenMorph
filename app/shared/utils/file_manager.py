@@ -10,15 +10,17 @@ from pathlib import Path
 from loguru import logger
 
 from app.config import settings
+from app.shared.utils.cloud_storage import CloudStorageService, smart_upload_file
 
 
 class FileManager:
     """文件管理器"""
     
     def __init__(self):
-        self.input_dir = Path(settings.input_dir)
-        self.output_dir = Path(settings.output_dir)
+        # 不再使用固定的input_dir和output_dir，完全按用户分目录
         self._ensure_directories()
+        # 初始化云存储服务
+        self.cloud_storage = CloudStorageService()
     
     def _ensure_directories(self):
         """确保必要的目录存在"""
@@ -27,6 +29,59 @@ class FileManager:
         static_dir = Path("static")
         static_dir.mkdir(exist_ok=True)
     
+    async def save_uploaded_file_with_cloud(
+        self, 
+        content: bytes, 
+        filename: str, 
+        userid: str,
+        task_id: str = None,
+        category: str = "input",
+        prefix: str = None,
+        post_id: str = None
+    ) -> Tuple[str, str, Optional[str]]:
+        """
+        保存上传的文件到本地和云存储
+        
+        Args:
+            content: 文件内容
+            filename: 原始文件名
+            userid: 用户ID
+            task_id: 任务ID（可选）
+            category: 文件分类（input/output）
+            prefix: 文件名前缀（可选，用于标识文件类型）
+            post_id: 帖子ID（用于社区图片）
+            
+        Returns:
+            Tuple[str, str, Optional[str]]: (本地文件路径, 公开URL, 云存储URL)
+        """
+        try:
+            # 1. 保存到本地（保持原有功能）
+            file_path, public_url = self.save_uploaded_file(
+                content, filename, userid, task_id, category, prefix, post_id
+            )
+            
+            # 2. 上传到云存储
+            cloud_url = None
+            if self.cloud_storage.is_cloud_storage_enabled():
+                try:
+                    # 使用智能上传：优先OSS，降级ImgBB
+                    cloud_url = await smart_upload_file(file_path, filename)
+                    if cloud_url:
+                        logger.info(f"✅ 文件已上传到云存储: {cloud_url}")
+                    else:
+                        logger.warning("⚠️ 云存储上传失败，但本地保存成功")
+                except Exception as e:
+                    logger.error(f"❌ 云存储上传异常: {str(e)}")
+                    # 云存储失败不影响本地保存
+            else:
+                logger.info("云存储功能未启用，跳过云上传")
+            
+            return file_path, public_url, cloud_url
+            
+        except Exception as e:
+            logger.error(f"文件保存失败: {str(e)}")
+            raise Exception(f"文件保存失败: {str(e)}")
+
     def save_uploaded_file(
         self, 
         content: bytes, 
@@ -138,7 +193,7 @@ class FileManager:
                 filename = f"{task_id}_{file_type}.jpg"
             
             # 确定保存目录 - 按用户分目录
-            user_output_dir = Path("static") / userid / "output"
+            user_output_dir = Path("static") / "users" / userid / "output"
             
             if file_type == "step" or file_type == "visualization":
                 save_dir = user_output_dir / "steps"
@@ -166,15 +221,13 @@ class FileManager:
         try:
             path = Path(file_path)
             
-            # 根据路径确定URL
-            if "input" in str(path):
-                relative_path = path.relative_to(self.input_dir)
-                return f"/static/input/{relative_path}"
-            elif "output" in str(path):
-                relative_path = path.relative_to(self.output_dir)
-                return f"/output/{relative_path}"
+            # 根据路径确定URL - 使用新的用户分目录结构
+            path_str = str(path)
+            if path_str.startswith("static/"):
+                return f"/{path_str}"
             else:
-                return f"/output/{path.name}"
+                # 兼容旧格式，默认返回文件名
+                return f"/static/{path.name}"
                 
         except Exception as e:
             logger.error(f"生成公开URL失败: {str(e)}")
@@ -202,14 +255,19 @@ class FileManager:
             current_time = time.time()
             max_age_seconds = max_age_hours * 3600
             
-            # 清理输出目录
-            for root, dirs, files in os.walk(self.output_dir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    file_age = current_time - os.path.getmtime(file_path)
-                    if file_age > max_age_seconds:
-                        os.remove(file_path)
-                        logger.info(f"已删除旧文件: {file_path}")
+            # 清理输出目录 - 现在清理所有用户的输出目录
+            static_dir = Path("static")
+            if not static_dir.exists():
+                return
+            
+            for user_dir in static_dir.glob("users/*/output"):
+                for root, dirs, files in os.walk(user_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        file_age = current_time - os.path.getmtime(file_path)
+                        if file_age > max_age_seconds:
+                            os.remove(file_path)
+                            logger.info(f"已删除旧文件: {file_path}")
             
             logger.info("文件清理完成")
             
