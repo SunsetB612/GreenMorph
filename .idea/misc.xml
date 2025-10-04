@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="Python 3.8 (GreenMorph-feat-tongyi-qwen)" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.8 (GreenMorph-feat-tongyi-qwen)" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.10 (GreenMorph)" project-jdk-type="Python SDK" />
 </project>

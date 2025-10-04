@@ -85,12 +85,9 @@ from app.core.user.router import router as auth_router
 
 # 注册路由
 app.include_router(redesign_router, prefix="/api/redesign", tags=["改造项目"])
-<<<<<<< HEAD
 app.include_router(community_router, prefix="/api/community", tags=["社区"])
-=======
 app.include_router(auth_router, prefix="/api/auth", tags=["用户认证"])
 
->>>>>>> upstream/main
 
 @app.get("/")
 async def root():

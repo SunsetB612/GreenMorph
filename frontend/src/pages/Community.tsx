@@ -16,7 +16,6 @@ import { EditOutlined } from '@ant-design/icons';
 import { DeleteOutlined, ExclamationCircleFilled } from '@ant-design/icons';
 
 const { Title, Paragraph } = Typography;
-<<<<<<< HEAD
 const { TabPane } = Tabs;
 const API_BASE_URL = 'http://localhost:8000';
 interface PostType {
@@ -31,8 +30,6 @@ interface PostType {
   images?: string[]; // 添加图片URL数组
   is_liked?: boolean; // 添加点赞状态字段
 }
-=======
->>>>>>> upstream/main
 
 const Community: React.FC = () => {
   const [searchValue, setSearchValue] = useState('');
@@ -335,6 +332,8 @@ interface CommentType {
   user_name: string;
   user_avatar: string;
   images: string[];
+  is_liked?: boolean;
+  likes_count: number;
 }
 
   const [comments, setComments] = useState<CommentType[]>([]);
@@ -355,11 +354,53 @@ const fetchComments = async (postId: number, page: number = 1) => {
     );
     const data = await response.json();
 
-    setComments(data.items || []);
+    // 设置基础评论数据 - 修复TypeScript错误
+    const basicComments = (data.items || []).map((comment: CommentType) => ({
+      ...comment,
+      is_liked: false,
+      likes_count: comment.likes_count || 0
+    }));
+
+    setComments(basicComments);
     setCommentTotal(data.total || 0);
+
+    // 批量查询点赞状态和点赞数 - 直接执行，不延迟
+    if (data.items && data.items.length > 0) {
+      const commentIds = data.items.map((comment: CommentType) => comment.id).join(",");
+
+      try {
+        const batchStatusResponse = await fetch(
+          `${API_BASE_URL}/api/community/comments/like/status/batch?comment_ids=${commentIds}`
+        );
+
+        if (batchStatusResponse.ok) {
+          const batchStatusData = await batchStatusResponse.json();
+
+          // 更新状态
+          setComments(prev => {
+            const updated = prev.map(comment => ({
+              ...comment,
+              is_liked: batchStatusData.status_map[comment.id] || false,
+              likes_count: batchStatusData.likes_count_map ?
+                (batchStatusData.likes_count_map[comment.id] || 0) : 0
+            }));
+
+            // 显示最终点赞数
+            let message = "批量查询后的点赞数:\n";
+            updated.forEach(comment => {
+              message += `评论${comment.id}: ${comment.likes_count}赞\n`;
+            })
+
+            return updated;
+          });
+        }
+      } catch (error) {
+
+      }
+    }
+
   } catch (error) {
-    console.error('获取评论失败:', error);
-    message.error('获取评论失败');
+
   } finally {
     setCommentLoading(false);
   }
@@ -522,6 +563,42 @@ const handleLike = async (postId: number) => {
           }
         : post
     ));
+
+    message.success(result.message);
+  } catch (error) {
+    console.error('操作失败:', error);
+    message.error('操作失败');
+  }
+};
+
+// 智能评论点赞函数
+const handleLikeComment = async (commentId: number) => {
+  try {
+    const comment = comments.find(c => c.id === commentId);
+    const isCurrentlyLiked = comment?.is_liked || false;
+    const method = isCurrentlyLiked ? 'DELETE' : 'POST';
+
+    const response = await fetch(`${API_BASE_URL}/api/community/comments/${commentId}/like`, {
+      method: method,
+    });
+
+    if (!response.ok) {
+      throw new Error('操作失败');
+    }
+
+    const result = await response.json();
+    // 关键修复：确保更新点赞数
+    setComments(prev => prev.map(comment => {
+      if (comment.id === commentId) {
+        console.log(`🔄 更新评论 ${commentId}: 点赞数 ${comment.likes_count} -> ${result.likes_count}`);
+        return {
+          ...comment,
+          is_liked: !isCurrentlyLiked,
+          likes_count: result.likes_count // 强制使用后端返回的点赞数
+        };
+      }
+      return comment;
+    }));
 
     message.success(result.message);
   } catch (error) {
@@ -707,12 +784,14 @@ const handleLike = async (postId: number) => {
   onCancel={() => {
     setCommentModalVisible(false);
     setCurrentPostId(null);
-    setComments([]);
+    // setComments([]);
+    setCommentContent(''); // 只清空输入框
+    setCommentImages([]);  // 只清空待上传的图片
     setCommentPage(1);
   }}
   footer={null}
   width={650}
-  destroyOnClose
+  destroyOnClose={false}
 >
   {commentLoading && comments.length === 0 ? (
     <div style={{ textAlign: 'center', padding: '40px' }}>加载中...</div>
@@ -748,6 +827,19 @@ const handleLike = async (postId: number) => {
                         <div style={{fontSize: '12px', color: '#999'}}>
                           {new Date(comment.created_at).toLocaleString()}
                         </div>
+                        {/* 评论点赞按钮 */}
+<Button
+  type="link"
+  size="small"
+  icon={comment.is_liked ? <HeartFilled /> : <HeartOutlined />}
+  onClick={() => handleLikeComment(comment.id)}
+  style={{
+    color: comment.is_liked ? '#ff4d4f' : 'inherit',
+    padding: '0 4px'
+  }}
+>
+  {comment.likes_count || 0}
+</Button>
                         {/* 删除按钮 - 只有评论作者能看到 */}
                   {currentUser && comment.user_id === currentUser.id && (
                     <Button
@@ -891,7 +983,6 @@ const handleLike = async (postId: number) => {
 
       <Row gutter={[24, 24]}>
         <Col xs={24} lg={16}>
-<<<<<<< HEAD
           <Tabs activeKey={category} onChange={(key) => {
             setCategory(key);
             setPage(1);
@@ -1014,114 +1105,6 @@ const handleLike = async (postId: number) => {
 
             ))}
           </Tabs>
-=======
-          <Tabs 
-            defaultActiveKey="hot"
-            items={[
-              {
-                key: 'hot',
-                label: '热门',
-                children: (
-                  <div>
-                    {posts.map(post => (
-                      <Card 
-                        key={post.id} 
-                        style={{ marginBottom: '16px' }}
-                        hoverable
-                      >
-                        <div style={{ marginBottom: '12px' }}>
-                          <Space>
-                            <Avatar src={post.avatar} />
-                            <div>
-                              <div style={{ fontWeight: 'bold' }}>{post.user}</div>
-                              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                                <ClockCircleOutlined /> {post.time}
-                              </div>
-                            </div>
-                          </Space>
-                        </div>
-
-                        <Title level={4} style={{ marginBottom: '8px' }}>
-                          {post.title}
-                        </Title>
-
-                        <Paragraph style={{ marginBottom: '12px' }}>
-                          {post.content}
-                        </Paragraph>
-
-                        <div style={{ marginBottom: '12px' }}>
-                          <img 
-                            src={post.images[0]} 
-                            alt="post" 
-                            style={{ 
-                              width: '100%', 
-                              maxWidth: '300px',
-                              borderRadius: '8px' 
-                            }} 
-                          />
-                        </div>
-
-                        <div style={{ marginBottom: '12px' }}>
-                          {post.tags.map(tag => (
-                            <Tag key={tag} color="blue">{tag}</Tag>
-                          ))}
-                        </div>
-
-                        <div style={{ 
-                          display: 'flex', 
-                          justifyContent: 'space-between',
-                          borderTop: '1px solid var(--border-color)',
-                          paddingTop: '12px'
-                        }}>
-                          <Button 
-                            type="text" 
-                            icon={<HeartOutlined />}
-                            onClick={() => handleLike(post.id)}
-                            style={{ color: post.isLiked ? 'var(--error-color)' : 'var(--text-secondary)' }}
-                          >
-                            {post.likes}
-                          </Button>
-                          <Button 
-                            type="text" 
-                            icon={<MessageOutlined />}
-                            onClick={() => handleComment(post.id)}
-                          >
-                            {post.comments}
-                          </Button>
-                          <Button 
-                            type="text" 
-                            icon={<ShareAltOutlined />}
-                            onClick={() => handleShare(post.id)}
-                          >
-                            {post.shares}
-                          </Button>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                )
-              },
-              {
-                key: 'latest',
-                label: '最新',
-                children: (
-                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-                    最新内容加载中...
-                  </div>
-                )
-              },
-              {
-                key: 'following',
-                label: '关注',
-                children: (
-                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-                    关注的内容将在这里显示
-                  </div>
-                )
-              }
-            ]}
-          />
->>>>>>> upstream/main
         </Col>
 
         <Col xs={24} lg={8}>

@@ -13,7 +13,7 @@ from loguru import logger
 from volcenginesdkarkruntime import Ark
 from volcenginesdkarkruntime.types.images.images import SequentialImageGenerationOptions
 from dotenv import load_dotenv
-
+from typing import Optional
 # 加载.env文件
 load_dotenv()
 

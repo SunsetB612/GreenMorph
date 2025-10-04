@@ -3,7 +3,7 @@
 GreenMorph 启动脚本
 提供便捷的启动和配置选项
 """
-
+import traceback
 import os
 import sys
 import argparse
@@ -146,6 +146,8 @@ def main():
     except KeyboardInterrupt:
         logger.info("收到停止信号，正在关闭服务...")
     except Exception as e:
+
+        traceback.print_exc()  # 打印完整调用栈
         logger.error(f"服务启动失败: {str(e)}")
         sys.exit(1)
     finally:

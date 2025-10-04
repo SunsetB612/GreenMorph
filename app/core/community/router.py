@@ -692,13 +692,152 @@ async def get_like_status(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询点赞状态失败: {str(e)}")
 
-@router.post("/comments/{comment_id}/like")
-async def like_comment(comment_id: int):
-    """点赞评论"""
-    pass
 
+
+
+@router.post("/comments/{comment_id}/like")
+async def like_comment(
+    comment_id: int,
+    db: Session = Depends(get_db)
+):
+    """点赞评论"""
+    try:
+        current_user_id = 1
+
+        # 1. 验证评论是否存在
+        comment = db.query(Comment).filter(Comment.id == comment_id).first()
+        if not comment:
+            raise HTTPException(status_code=404, detail="评论不存在")
+
+        # 2. 检查是否已经点赞
+        existing_like = db.query(Like).filter(
+            Like.user_id == current_user_id,
+            Like.target_type == TargetType.COMMENT,
+            Like.target_id == comment_id
+        ).first()
+
+        if existing_like:
+            raise HTTPException(status_code=400, detail="已经点赞过该评论")
+
+        # 3. 执行点赞
+        new_like = Like(
+            user_id=current_user_id,
+            target_type=TargetType.COMMENT,
+            target_id=comment_id
+        )
+        db.add(new_like)
+        db.commit()
+
+        # 4. 查询当前评论的总点赞数（点赞后总数）
+        like_count = db.query(Like).filter(
+            Like.target_type == TargetType.COMMENT,
+            Like.target_id == comment_id
+        ).count()
+
+        print(f"✅ 点赞成功，评论 {comment_id} 当前点赞数: {like_count}")  # 调试信息
+
+        return {
+            "message": "评论点赞成功",
+            "comment_id": comment_id,
+            "user_id": current_user_id,
+            "likes_count": like_count
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"评论点赞失败: {str(e)}")
 
 @router.delete("/comments/{comment_id}/like")
-async def unlike_comment(comment_id: int):
+async def unlike_comment(
+    comment_id: int,
+    db: Session = Depends(get_db)
+):
     """取消点赞评论"""
-    pass
+    try:
+        current_user_id = 1
+
+        # 1. 验证评论是否存在
+        comment = db.query(Comment).filter(Comment.id == comment_id).first()
+        if not comment:
+            raise HTTPException(status_code=404, detail="评论不存在")
+
+        # 2. 检查是否已经点赞
+        existing_like = db.query(Like).filter(
+            Like.user_id == current_user_id,
+            Like.target_type == TargetType.COMMENT,
+            Like.target_id == comment_id
+        ).first()
+
+        if not existing_like:
+            raise HTTPException(status_code=400, detail="尚未点赞该评论")
+
+        # 3. 执行取消点赞
+        db.delete(existing_like)
+        db.commit()
+
+        # 4. 查询当前评论的总点赞数（取消点赞后总数）
+        like_count = db.query(Like).filter(
+            Like.target_type == TargetType.COMMENT,
+            Like.target_id == comment_id
+        ).count()
+
+        print(f"✅ 取消点赞成功，评论 {comment_id} 当前点赞数: {like_count}")  # 调试信息
+
+        return {
+            "message": "取消评论点赞成功",
+            "comment_id": comment_id,
+            "user_id": current_user_id,
+            "likes_count": like_count
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"取消评论点赞失败: {str(e)}")
+
+
+@router.get("/comments/like/status/batch")
+async def get_batch_comment_like_status(
+        comment_ids: str = Query(..., description="评论ID列表，用逗号分隔"),
+        db: Session = Depends(get_db)
+):
+    """批量获取当前用户对多个评论的点赞状态和点赞数"""
+    try:
+        current_user_id = 1
+
+        comment_id_list = [int(cid) for cid in comment_ids.split(",") if cid]
+
+        print(f"🔍 查询评论ID: {comment_id_list}")
+
+        # 查询点赞状态
+        likes = db.query(Like).filter(
+            Like.user_id == current_user_id,
+            Like.target_type == TargetType.COMMENT,
+            Like.target_id.in_(comment_id_list)
+        ).all()
+        status_map = {like.target_id: True for like in likes}
+
+        # 查询点赞数 - 确保这部分的代码存在且正确
+        likes_count_map = {}
+        for comment_id in comment_id_list:
+            count = db.query(Like).filter(
+                Like.target_type == TargetType.COMMENT,
+                Like.target_id == comment_id
+            ).count()
+            likes_count_map[comment_id] = count
+
+        print(f"✅ 最终返回: status_map={status_map}, likes_count_map={likes_count_map}")
+
+        # 确保返回了 likes_count_map
+        return {
+            "status_map": status_map,
+            "likes_count_map": likes_count_map,  # 确保这行存在
+            "user_id": current_user_id
+        }
+
+    except Exception as e:
+        print(f"❌ 批量查询失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"批量查询评论点赞状态失败: {str(e)}")
