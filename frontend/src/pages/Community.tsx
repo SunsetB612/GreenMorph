@@ -18,6 +18,9 @@ import { DeleteOutlined, ExclamationCircleFilled } from '@ant-design/icons';
 const { Title, Paragraph } = Typography;
 const { TabPane } = Tabs;
 const API_BASE_URL = 'http://localhost:8000';
+import { useAuthStore } from '../store/authStore';
+// 删除假的currentUser状态，使用真实的认证store
+
 interface PostType {
   id: number;
   user_id: number;
@@ -29,9 +32,11 @@ interface PostType {
   updated_at: string;
   images?: string[]; // 添加图片URL数组
   is_liked?: boolean; // 添加点赞状态字段
+  user_name?: string;
 }
 
 const Community: React.FC = () => {
+  const { user, isAuthenticated, isLoading: authLoading } = useAuthStore();
   const [searchValue, setSearchValue] = useState('');
   const [posts, setPosts] = useState<PostType[]>([]);
   const [category, setCategory] = useState('popular'); //popular / latest / following
@@ -61,23 +66,25 @@ const fetchPosts = async () => {
           );
           const commentData = await commentRes.json();
 
-          // 获取点赞状态
+          // 获取点赞状态 - 添加认证头
+          const token = localStorage.getItem('auth_token');
           const likeStatusRes = await fetch(
-            `${API_BASE_URL}/api/community/posts/${post.id}/like/status`
+            `${API_BASE_URL}/api/community/posts/${post.id}/like/status`,
+            {
+              headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            }
           );
+
+          let is_liked = false;
           if (likeStatusRes.ok) {
             const likeStatusData = await likeStatusRes.json();
-            return {
-              ...post,
-              comments_count: commentData.total || 0,
-              is_liked: likeStatusData.is_liked
-            };
+            is_liked = likeStatusData.is_liked;
           }
 
           return {
             ...post,
             comments_count: commentData.total || 0,
-            is_liked: false
+            is_liked: is_liked
           };
         } catch (error) {
           console.error(`获取帖子 ${post.id} 数据失败:`, error);
@@ -119,14 +126,25 @@ interface CreatePostFormValues {
 
 // 创建帖子
 const handleCreatePost = async (values: CreatePostFormValues) => {
+  // 添加认证检查
+  if (!isAuthenticated || !user) {
+    message.warning('请先登录后再发布帖子');
+    return;
+  }
+
   setCreateLoading(true);
-  console.log('提交的表单值:', values);
 
   try {
-    // 1. 先创建帖子
+    // 获取token
+    const token = localStorage.getItem('auth_token');
+
+    // 创建帖子请求 - 添加Authorization头
     const postResponse = await fetch(`${API_BASE_URL}/api/community/posts`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`  // 手动添加token
+      },
       body: JSON.stringify({
         title: values.title,
         content: values.content
@@ -142,37 +160,47 @@ const handleCreatePost = async (values: CreatePostFormValues) => {
     const postId = newPost.id;
 
     // 2. 上传图片（如果有）
-    if (values.images && values.images.length > 0) {
-      console.log('开始上传图片，数量:', values.images.length);
+if (values.images && values.images.length > 0) {
+  console.log('开始上传图片，数量:', values.images.length);
 
-      const uploadPromises = values.images.map(async (fileObj) => {
-        // 直接使用 originFileObj，它的类型就是 File | undefined
-        const file = fileObj.originFileObj;
+  // 获取token
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    console.error('未找到认证token');
+    message.error('上传图片失败：用户未认证');
+    return;
+  }
 
-        if (!file) {
-          console.warn('文件对象不存在，跳过');
-          return null;
-        }
+  const uploadPromises = values.images.map(async (fileObj) => {
+    const file = fileObj.originFileObj;
 
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const uploadResponse = await fetch(`${API_BASE_URL}/api/community/posts/${postId}/images`, {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!uploadResponse.ok) {
-          const errorText = await uploadResponse.text();
-          console.error('图片上传失败:', errorText);
-        }
-
-        return uploadResponse;
-      });
-
-      await Promise.allSettled(uploadPromises);
-      console.log('所有图片上传完成');
+    if (!file) {
+      console.warn('文件对象不存在，跳过');
+      return null;
     }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const uploadResponse = await fetch(`${API_BASE_URL}/api/community/posts/${postId}/images`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`  // 添加认证头
+      },
+      body: formData,
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      console.error('图片上传失败:', errorText);
+    }
+
+    return uploadResponse;
+  });
+
+  await Promise.allSettled(uploadPromises);
+  console.log('所有图片上传完成');
+}
 
     message.success('发布成功！');
     setCreateModalVisible(false);
@@ -226,31 +254,70 @@ const fetchPostDetail = async (postId: number) => {
 
 // 编辑按钮点击事件
 const handleEdit = (post: PostType) => {
-  // TODO: 检查当前用户是否是帖子作者
+  // 添加认证检查
+  if (!isAuthenticated || !user) {
+    message.warning('请先登录后再编辑帖子');
+    return;
+  }
+
+  // 添加作者权限检查
+  if (post.user_id !== user.id) {
+    message.error('无权编辑他人帖子');
+    return;
+  }
+
   fetchPostDetail(post.id);
 };
 
-// 编辑帖子函数
 const handleUpdatePost = async (values: CreatePostFormValues) => {
   if (!editingPost) return;
 
+  // 双重权限检查
+  if (!isAuthenticated || !user) {
+    message.warning('请先登录后再编辑帖子');
+    return;
+  }
+
+  if (editingPost.user_id !== user.id) {
+    message.error('无权编辑他人帖子');
+    return;
+  }
+
   try {
-    // 1. 更新帖子文本内容
+    // 获取token
+    const token = localStorage.getItem('auth_token');
+
+    // 1. 更新帖子文本内容 - 添加认证头
     const response = await fetch(`${API_BASE_URL}/api/community/posts/${editingPost.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`  // 添加认证头
+      },
       body: JSON.stringify(values),
     });
 
-    if (!response.ok) throw new Error('更新失败');
+    if (!response.ok) {
+      // 如果是401错误，给出友好提示
+      if (response.status === 401) {
+        throw new Error('UNAUTHORIZED');
+      }
+      throw new Error('更新失败');
+    }
 
-    // 2. 上传新图片
+    // 2. 上传新图片 - 添加认证头
     if (newImages.length > 0) {
       for (const file of newImages) {
         const formData = new FormData();
         formData.append('file', file);
+
+        const token = localStorage.getItem('auth_token');
+
         await fetch(`${API_BASE_URL}/api/community/posts/${editingPost.id}/images`, {
           method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`  // 添加认证头
+          },
           body: formData,
         });
       }
@@ -263,7 +330,13 @@ const handleUpdatePost = async (values: CreatePostFormValues) => {
     editForm.resetFields();
     fetchPosts();
   } catch (error) {
-    message.error('更新失败');
+    // 友好的错误提示
+    if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+      message.error('登录已过期，请重新登录后继续操作');
+    } else {
+      message.error('更新失败，请稍后重试');
+    }
+    console.error('更新失败:', error);
   }
 };
 
@@ -279,12 +352,14 @@ const { confirm } = Modal;
 
 // 删除帖子函数
 const handleDelete = (post: PostType) => {
-  if (!currentUser) {
+  // 第一重权限检查
+  if (!user) {
     message.warning('请先登录');
     return;
   }
 
-  if (post.user_id !== currentUser.id) {
+  // 第二重权限检查：只有作者能删除
+  if (post.user_id !== user.id) {
     message.error('无权删除他人帖子');
     return;
   }
@@ -305,19 +380,38 @@ const handleDelete = (post: PostType) => {
 // 调用删除接口
 const deletePost = async (postId: number) => {
   try {
+    // 获取token
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      message.error('认证token不存在，请重新登录');
+      return;
+    }
+
     const response = await fetch(`${API_BASE_URL}/api/community/posts/${postId}`, {
       method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`  // 添加认证头
+      },
     });
 
     if (!response.ok) {
+      // 如果是401错误，给出友好提示
+      if (response.status === 401) {
+        throw new Error('UNAUTHORIZED');
+      }
       throw new Error('删除失败');
     }
 
     message.success('帖子删除成功！');
     fetchPosts(); // 刷新列表
   } catch (error) {
+    // 友好的错误提示
+    if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+      message.error('登录已过期，请重新登录后继续操作');
+    } else {
+      message.error('删除失败，请稍后重试');
+    }
     console.error('删除失败:', error);
-    message.error('删除失败');
   }
 };
 
@@ -346,6 +440,7 @@ interface CommentType {
 
 
 // 获取评论列表
+// 获取评论列表
 const fetchComments = async (postId: number, page: number = 1) => {
   setCommentLoading(true);
   try {
@@ -354,23 +449,29 @@ const fetchComments = async (postId: number, page: number = 1) => {
     );
     const data = await response.json();
 
-    // 设置基础评论数据 - 修复TypeScript错误
+    // 获取token用于点赞状态查询
+    const token = localStorage.getItem('auth_token');
+
+    // 设置基础评论数据
     const basicComments = (data.items || []).map((comment: CommentType) => ({
       ...comment,
-      is_liked: false,
+      is_liked: false, // 先设为false，后面会更新
       likes_count: comment.likes_count || 0
     }));
 
     setComments(basicComments);
     setCommentTotal(data.total || 0);
 
-    // 批量查询点赞状态和点赞数 - 直接执行，不延迟
+    // 批量查询点赞状态和点赞数
     if (data.items && data.items.length > 0) {
       const commentIds = data.items.map((comment: CommentType) => comment.id).join(",");
 
       try {
         const batchStatusResponse = await fetch(
-          `${API_BASE_URL}/api/community/comments/like/status/batch?comment_ids=${commentIds}`
+          `${API_BASE_URL}/api/community/comments/like/status/batch?comment_ids=${commentIds}`,
+          {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+          }
         );
 
         if (batchStatusResponse.ok) {
@@ -384,23 +485,16 @@ const fetchComments = async (postId: number, page: number = 1) => {
               likes_count: batchStatusData.likes_count_map ?
                 (batchStatusData.likes_count_map[comment.id] || 0) : 0
             }));
-
-            // 显示最终点赞数
-            let message = "批量查询后的点赞数:\n";
-            updated.forEach(comment => {
-              message += `评论${comment.id}: ${comment.likes_count}赞\n`;
-            })
-
             return updated;
           });
         }
       } catch (error) {
-
+        console.error('批量查询点赞状态失败:', error);
       }
     }
 
   } catch (error) {
-
+    console.error('获取评论失败:', error);
   } finally {
     setCommentLoading(false);
   }
@@ -408,6 +502,12 @@ const fetchComments = async (postId: number, page: number = 1) => {
 
 // 点击评论按钮
 const handleComment = (postId: number) => {
+  // 添加认证检查
+  if (!isAuthenticated || !user) {
+    message.warning('请先登录后再发表评论');
+    return;
+  }
+
   setCurrentPostId(postId);
   setCommentModalVisible(true);
   setCommentPage(1);
@@ -441,8 +541,15 @@ const loadMoreComments = async () => {
   // 添加图片相关状态
 const [commentImages, setCommentImages] = useState<File[]>([]);
 const [uploadingImages, setUploadingImages] = useState(false);
+
 // 创建评论
 const handleSubmitComment = async () => {
+  // 添加认证检查
+  if (!isAuthenticated || !user) {
+    message.warning('请先登录后再发表评论');
+    return;
+  }
+
   if (!currentPostId || (!commentContent.trim() && commentImages.length === 0)) {
     message.warning('请输入评论内容或选择图片');
     return;
@@ -450,21 +557,35 @@ const handleSubmitComment = async () => {
 
   setSubmittingComment(true);
   try {
-    // 1. 先创建评论
+    // 获取token
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      message.error('认证token不存在，请重新登录');
+      return;
+    }
+
+    // 1. 先创建评论 - 添加认证头
     const commentResponse = await fetch(`${API_BASE_URL}/api/community/posts/${currentPostId}/comments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`  // 添加认证头
       },
       body: JSON.stringify({
         content: commentContent.trim()
       }),
     });
 
-    if (!commentResponse.ok) throw new Error('评论发布失败');
+    if (!commentResponse.ok) {
+      // 如果是401错误，给出友好提示
+      if (commentResponse.status === 401) {
+        throw new Error('UNAUTHORIZED');
+      }
+      throw new Error('评论发布失败');
+    }
     const newComment = await commentResponse.json();
 
-    // 2. 如果有图片，上传图片到评论
+    // 2. 如果有图片，上传图片到评论 - 添加认证头
     if (commentImages.length > 0) {
       setUploadingImages(true);
       for (const imageFile of commentImages) {
@@ -475,6 +596,9 @@ const handleSubmitComment = async () => {
           `${API_BASE_URL}/api/community/comments/${newComment.id}/images`,
           {
             method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`  // 添加认证头
+            },
             body: formData,
           }
         );
@@ -498,8 +622,13 @@ const handleSubmitComment = async () => {
 
     message.success('评论发布成功！');
   } catch (error) {
+    // 友好的错误提示
+    if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+      message.error('登录已过期，请重新登录后继续操作');
+    } else {
+      message.error('评论发布失败');
+    }
     console.error('发布评论失败:', error);
-    message.error('评论发布失败');
   } finally {
     setSubmittingComment(false);
   }
@@ -508,11 +637,25 @@ const handleSubmitComment = async () => {
 // 删除评论函数
 const deleteComment = async (commentId: number) => {
   try {
+    // 获取token
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      message.error('认证token不存在，请重新登录');
+      return;
+    }
+
     const response = await fetch(`${API_BASE_URL}/api/community/comments/${commentId}`, {
       method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`  // 添加认证头
+      },
     });
 
     if (!response.ok) {
+      // 如果是401错误，给出友好提示
+      if (response.status === 401) {
+        throw new Error('UNAUTHORIZED');
+      }
       throw new Error('删除评论失败');
     }
 
@@ -527,8 +670,13 @@ const deleteComment = async (commentId: number) => {
 
     message.success('评论删除成功！');
   } catch (error) {
+    // 友好的错误提示
+    if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+      message.error('登录已过期，请重新登录后继续操作');
+    } else {
+      message.error('删除评论失败，请稍后重试');
+    }
     console.error('删除评论失败:', error);
-    message.error('删除评论失败');
   }
 };
 
@@ -537,17 +685,38 @@ const deleteComment = async (commentId: number) => {
 const [likeStatus, setLikeStatus] = useState<{[postId: number]: boolean}>({});
 
 // 智能点赞函数
+// 智能点赞函数
 const handleLike = async (postId: number) => {
+  // 添加认证检查
+  if (!isAuthenticated || !user) {
+    message.warning('请先登录后再点赞');
+    return;
+  }
+
   try {
     const currentPost = posts.find(post => post.id === postId);
     const isCurrentlyLiked = currentPost?.is_liked || false;
     const method = isCurrentlyLiked ? 'DELETE' : 'POST';
 
+    // 获取token
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      message.error('认证token不存在，请重新登录');
+      return;
+    }
+
     const response = await fetch(`${API_BASE_URL}/api/community/posts/${postId}/like`, {
       method: method,
+      headers: {
+        'Authorization': `Bearer ${token}`  // 添加认证头
+      },
     });
 
     if (!response.ok) {
+      // 如果是401错误，给出友好提示
+      if (response.status === 401) {
+        throw new Error('UNAUTHORIZED');
+      }
       throw new Error('操作失败');
     }
 
@@ -566,23 +735,49 @@ const handleLike = async (postId: number) => {
 
     message.success(result.message);
   } catch (error) {
+    // 友好的错误提示
+    if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+      message.error('登录已过期，请重新登录后继续操作');
+    } else {
+      message.error('操作失败');
+    }
     console.error('操作失败:', error);
-    message.error('操作失败');
   }
 };
 
 // 智能评论点赞函数
+// 智能评论点赞函数
 const handleLikeComment = async (commentId: number) => {
+  // 添加认证检查
+  if (!isAuthenticated || !user) {
+    message.warning('请先登录后再点赞');
+    return;
+  }
+
   try {
     const comment = comments.find(c => c.id === commentId);
     const isCurrentlyLiked = comment?.is_liked || false;
     const method = isCurrentlyLiked ? 'DELETE' : 'POST';
 
+    // 获取token
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      message.error('认证token不存在，请重新登录');
+      return;
+    }
+
     const response = await fetch(`${API_BASE_URL}/api/community/comments/${commentId}/like`, {
       method: method,
+      headers: {
+        'Authorization': `Bearer ${token}`  // 添加认证头
+      },
     });
 
     if (!response.ok) {
+      // 如果是401错误，给出友好提示
+      if (response.status === 401) {
+        throw new Error('UNAUTHORIZED');
+      }
       throw new Error('操作失败');
     }
 
@@ -602,8 +797,13 @@ const handleLikeComment = async (commentId: number) => {
 
     message.success(result.message);
   } catch (error) {
+    // 友好的错误提示
+    if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+      message.error('登录已过期，请重新登录后继续操作');
+    } else {
+      message.error('操作失败');
+    }
     console.error('操作失败:', error);
-    message.error('操作失败');
   }
 };
 
@@ -631,12 +831,18 @@ const handleLikeComment = async (commentId: number) => {
             />
           </Col>
           <Col xs={24} sm={8}>
-            <Button
+<Button
   type="primary"
   icon={<PlusOutlined />}
   size="large"
   block
-  onClick={() => setCreateModalVisible(true)}
+  onClick={() => {
+    if (!isAuthenticated) {
+      message.warning('请先登录后再发布帖子');
+      return;
+    }
+    setCreateModalVisible(true);
+  }}
 >
   发布创意
 </Button>
@@ -841,27 +1047,27 @@ const handleLikeComment = async (commentId: number) => {
   {comment.likes_count || 0}
 </Button>
                         {/* 删除按钮 - 只有评论作者能看到 */}
-                  {currentUser && comment.user_id === currentUser.id && (
-                    <Button
-                      type="link"
-                      danger
-                      size="small"
-                      icon={<DeleteOutlined />}
-                      onClick={() => {
-                        Modal.confirm({
-                          title: '确认删除',
-                          icon: <ExclamationCircleFilled />,
-                          content: '确定要删除这条评论吗？',
-                          okText: '确认删除',
-                          okType: 'danger',
-                          cancelText: '取消',
-                          onOk: () => deleteComment(comment.id),
-                        });
-                      }}
-                    >
-                      删除
-                    </Button>
-                  )}
+{user && comment.user_id === user.id && (  // 将 currentUser 改为 user
+  <Button
+    type="link"
+    danger
+    size="small"
+    icon={<DeleteOutlined />}
+    onClick={() => {
+      Modal.confirm({
+        title: '确认删除',
+        icon: <ExclamationCircleFilled />,
+        content: '确定要删除这条评论吗？',
+        okText: '确认删除',
+        okType: 'danger',
+        cancelText: '取消',
+        onOk: () => deleteComment(comment.id),
+      });
+    }}
+  >
+    删除
+  </Button>
+)}
                       </div>
                       <div style={{
                         fontSize: '14px',
@@ -1002,31 +1208,33 @@ const handleLikeComment = async (commentId: number) => {
     <>
       {posts.map(post => (
         <Card key={post.id} style={{ marginBottom: '16px' }} hoverable>
-          <div style={{ marginBottom: '12px' }}>
+          <div style={{marginBottom: '12px'}}>
             <Space>
-              <Avatar src={`https://api.dicebear.com/7.x/miniavs/svg?seed=${post.user_id}`} />
+              <Avatar src={`https://api.dicebear.com/7.x/miniavs/svg?seed=${post.user_id}`}/>
               <div>
-                <div style={{ fontWeight: 'bold' }}>用户 {post.user_id}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                  <ClockCircleOutlined /> {new Date(post.created_at).toLocaleString()}
+                <div style={{fontWeight: 'bold'}}>
+                  {post.user_name}
+                </div>
+                <div style={{fontSize: '12px', color: 'var(--text-tertiary)'}}>
+                  <ClockCircleOutlined/> {new Date(post.created_at).toLocaleString()}
                 </div>
               </div>
             </Space>
           </div>
 
-          <Title level={4} style={{ marginBottom: '8px' }}>{post.title}</Title>
-          <Paragraph style={{ marginBottom: '12px' }}>{post.content}</Paragraph>
+          <Title level={4} style={{marginBottom: '8px'}}>{post.title}</Title>
+          <Paragraph style={{marginBottom: '12px'}}>{post.content}</Paragraph>
           {/* 显示图片 */}
-{post.images?.map((imgUrl, index) => (
-  <Col key={index} xs={8}>
-    <img
-      src={`${API_BASE_URL}/${imgUrl}`}
-      alt={`帖子图片 ${index + 1}`}
-      style={{
-        width: '100%',
-        height: '100px',
-        objectFit: 'cover',
-        borderRadius: '8px',
+          {post.images?.map((imgUrl, index) => (
+              <Col key={index} xs={8}>
+                <img
+                    src={`${API_BASE_URL}/${imgUrl}`}
+                    alt={`帖子图片 ${index + 1}`}
+                    style={{
+                      width: '100%',
+                      height: '100px',
+                      objectFit: 'cover',
+                      borderRadius: '8px',
         cursor: 'pointer'
       }}
       onClick={() => handlePreview(imgUrl, post.title)}
@@ -1071,19 +1279,19 @@ const handleLikeComment = async (commentId: number) => {
             </Button>
 
 {/* 只有帖子作者才能看到编辑和删除按钮 */}
-  {currentUser && post.user_id === currentUser.id && (
-    <>
-      <Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(post)}>
-        编辑
-      </Button>
-      <Button
-        type="text"
-        danger
-        icon={<DeleteOutlined />}
-        onClick={() => handleDelete(post)}
-      >
-        删除
-      </Button>
+{user && post.user_id === user.id && (
+  <>
+    <Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(post)}>
+      编辑
+    </Button>
+     <Button
+    type="text"
+    danger
+    icon={<DeleteOutlined />}
+    onClick={() => handleDelete(post)}
+  >
+    删除
+  </Button>
     </>
   )}
             <Button type="text" icon={<ShareAltOutlined/>} onClick={() => handleShare(post.id)}>分享</Button>
