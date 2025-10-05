@@ -514,13 +514,6 @@ interface CommentType {
 
 
 
-// 添加评论图片预览函数
-const handleCommentPreview = (imgUrl: string, title:'') => {
-  setPreviewImage(imgUrl); // 评论图片已经是完整URL，不需要拼接API_BASE_URL
-  setPreviewTitle(title);
-  setPreviewVisible(true);
-};
-
 
 // 获取评论列表
 // 获取评论列表
@@ -1288,7 +1281,11 @@ const handleDeleteNewImage = (index: number) => {
               borderRadius: '6px',
               cursor: 'pointer'
             }}
-            onClick={() => handleCommentPreview(imgUrl,"")}
+            // 修复这里：直接设置预览图片
+            onClick={() => {
+              setPreviewImage(imgUrl);
+              setPreviewVisible(true);
+            }}
           />
         </Col>
       ))}
@@ -1420,19 +1417,23 @@ const handleDeleteNewImage = (index: number) => {
           <Title level={4} style={{marginBottom: '8px'}}>{post.title}</Title>
           <Paragraph style={{marginBottom: '12px'}}>{post.content}</Paragraph>
           {/* 显示图片 */}
-          {post.images?.map((imgUrl, index) => (
-              <Col key={index} xs={8}>
-                <img
-                    src={`${API_BASE_URL}/${imgUrl}`}
-                    alt={`帖子图片 ${index + 1}`}
-                    style={{
-                      width: '100%',
-                      height: '100px',
-                      objectFit: 'cover',
-                      borderRadius: '8px',
+{post.images?.map((imgUrl, index) => (
+  <Col key={index} xs={8}>
+    <img
+      src={`${API_BASE_URL}/${imgUrl}`}
+      alt={`帖子图片 ${index + 1}`}
+      style={{
+        width: '100%',
+        height: '100px',
+        objectFit: 'cover',
+        borderRadius: '8px',
         cursor: 'pointer'
       }}
-      onClick={() => handlePreview(imgUrl, post.title)}
+      // 修复这里：使用新的预览方式
+      onClick={() => {
+        setPreviewImage(`${API_BASE_URL}/${imgUrl}`);
+        setPreviewVisible(true);
+      }}
     />
   </Col>
 ))}
