@@ -4,3 +4,4 @@ output/
 test_images/
 logs/
 __pycache__/
+static/
