@@ -75,6 +75,9 @@ def create_tables():
         
         # 创建所有表的SQL语句
         create_tables_sql = """
+   
+        DROP TABLE IF EXISTS user_achievements;
+        DROP TABLE IF EXISTS achievements;
         -- 1. 用户表
         CREATE TABLE IF NOT EXISTS users (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -208,7 +211,7 @@ def create_tables():
             name VARCHAR(100) NOT NULL,
             description TEXT,
             icon_filename VARCHAR(255),
-            condition_type ENUM('project_count', 'post_count', 'likes_received') NOT NULL,
+            condition_type ENUM('project_count', 'post_count', 'likes_received','comment_count') NOT NULL,
             condition_value INT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -252,9 +255,13 @@ def insert_initial_data():
         insert_achievements_sql = """
         INSERT INTO achievements (name, description, condition_type, condition_value) VALUES
         ('新手改造师', '完成第一个改造项目', 'project_count', 1),
-        ('社区活跃者', '发布第一个帖子', 'post_count', 1),
+        ('创意启蒙者', '发布第一个帖子', 'post_count', 1),
+        ('小有名气','获得10个点赞', 'likes_received', 10),
         ('改造达人', '完成10个改造项目', 'project_count', 10),
-        ('社区明星', '获得100个点赞', 'likes_received', 100);
+        ('社区明星', '获得100个点赞', 'likes_received', 100),
+        ('热心观众','发布第一条评论','comment_count',1),
+        ('创意大师','累计发布10个帖子','post_count',10),
+        ('热心评论家','累计发布10条评论','comment_count',10)
         """
         
         with engine.connect() as connection:

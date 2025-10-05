@@ -12,6 +12,8 @@ class ConditionType(str, enum.Enum):
     PROJECT_COUNT = "project_count"
     POST_COUNT = "post_count"
     LIKES_RECEIVED = "likes_received"
+    COMMENT_COUNT = "comment_count"
+
 
 
 class Achievement(Base):
@@ -22,7 +24,7 @@ class Achievement(Base):
     name = Column(String(100), nullable=False)
     description = Column(Text)
     icon_filename = Column(String(255))
-    condition_type = Column(Enum(ConditionType), nullable=False)
+    condition_type = Column(Enum('project_count','post_count','likes_received','comment_count',name='condition_type_enum',create_constraint=True,length=20),nullable=False)
     condition_value = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

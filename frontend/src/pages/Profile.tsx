@@ -25,20 +25,20 @@ import {
   UserOutlined,
   EnvironmentOutlined,
   CalendarOutlined,
-  LoginOutlined
+  LoginOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 
 const { Title, Paragraph } = Typography;
-
 const Profile: React.FC = () => {
   const [activeTab, setActiveTab] = useState('posts');
   const [userInfo, setUserInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editForm] = Form.useForm();
-  
+  const [achievements, setAchievements] = useState<any[]>([]);
+  const [achievementsLoading, setAchievementsLoading] = useState(false);
   const { user, isAuthenticated, checkAuth } = useAuthStore();
   const navigate = useNavigate();
 
@@ -123,14 +123,74 @@ const Profile: React.FC = () => {
       tags: ['塑料瓶', '花瓶']
     }
   ];
+  // 获取成就列表的函数
+  const fetchAchievements = async () => {
+    setAchievementsLoading(true);
+    try {
+      const response = await fetch('http://localhost:8000/api/gamification/achievements');
+      const result = await response.json();
 
-  const achievements = [
-    { name: '环保新手', icon: '🌱', description: '发布第一个创意', earned: true },
-    { name: '改造达人', icon: '🔧', description: '发布10个改造作品', earned: true },
-    { name: '社区活跃', icon: '💬', description: '获得50个点赞', earned: true },
-    { name: '创意大师', icon: '🎨', description: '发布50个创意', earned: false },
-    { name: '环保专家', icon: '🏆', description: '获得1000积分', earned: false }
-  ];
+      if (result.code === 200) {
+        setAchievements(result.data);
+      } else {
+        message.error('获取成就列表失败');
+      }
+    } catch (error) {
+      console.error('获取成就失败:', error);
+      message.error('获取成就列表失败');
+    } finally {
+      setAchievementsLoading(false);
+    }
+  };
+
+  // 在 useEffect 中调用
+  useEffect(() => {
+    const loadUserInfo = async () => {
+      if (isAuthenticated && user) {
+        setUserInfo(user);
+        // 获取成就数据
+        await fetchAchievements();
+        setLoading(false);
+      } else {
+        await checkAuth();
+        setLoading(false);
+      }
+    };
+
+    loadUserInfo();
+  }, [isAuthenticated, user, checkAuth]);
+  // 成就图标映射
+const getAchievementIcon = (name: string) => {
+  const iconMap: { [key: string]: string } = {
+    '新手改造师': '🌱',
+    '小有名气': '❤️',
+    '创意大师': '🎨',
+    '改造达人': '🔧',
+    '热心评论家': '💬',
+    '热心观众': '🗣️',
+    '社区明星': '🌟',
+    '创意启蒙者': '📚',
+  };
+  return iconMap[name] || '🏆';
+};
+
+// 条件文本显示
+const getConditionText = (conditionType: string, conditionValue: number) => {
+  const conditionMap: { [key: string]: string } = {
+    'post_count': `发布${conditionValue}个帖子`,
+    'likes_received': `获得${conditionValue}个点赞`,
+    'comment_count': `发表${conditionValue}条评论`,
+    'project_count': `完成${conditionValue}个项目`
+  };
+  return conditionMap[conditionType] || `${conditionType}: ${conditionValue}`;
+};
+  // const achievements = [
+  //   { name: '环保新手', icon: '🌱', description: '发布第一个创意', earned: true },
+  //   { name: '改造达人', icon: '🔧', description: '发布10个改造作品', earned: true },
+  //   { name: '社区活跃', icon: '💬', description: '获得50个点赞', earned: true },
+  //   { name: '创意大师', icon: '🎨', description: '发布50个创意', earned: false },
+  //   { name: '环保专家', icon: '🏆', description: '获得1000积分', earned: false }
+  // ];
 
   // 如果正在加载
   if (loading) {
@@ -374,46 +434,63 @@ const Profile: React.FC = () => {
           </Card>
 
           {/* 成就系统 */}
-          <Card title="成就徽章">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {achievements.map((achievement, index) => (
-                <div key={index} style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  padding: '12px',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '8px',
-                  backgroundColor: 'var(--card-background)'
-                }}>
-                  <span style={{ fontSize: '24px', marginRight: '12px' }}>
-                    {achievement.icon}
-                  </span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'space-between',
-                      marginBottom: '4px'
-                    }}>
-                      <span style={{ fontWeight: 500, fontSize: '16px' }}>
-                        {achievement.name}
-                      </span>
-                      <Tag color={achievement.earned ? 'green' : 'default'}>
-                        {achievement.earned ? '已获得' : '未获得'}
-                      </Tag>
-                    </div>
-                    <div style={{ 
-                      color: 'var(--text-secondary)', 
-                      fontSize: '14px',
-                      lineHeight: '1.4'
-                    }}>
-                      {achievement.description}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
+<Card title="成就徽章" loading={achievementsLoading}>
+  <div
+    style={{
+      maxHeight: '400px',
+      overflowY: 'auto',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '16px',
+      paddingRight: '8px',
+    }}
+  >
+    {achievements.map((achievement) => (
+      <div key={achievement.id} style={{
+        display: 'flex',
+        alignItems: 'center',
+        padding: '12px',
+        border: '1px solid var(--border-color)',
+        borderRadius: '8px',
+        backgroundColor: 'var(--card-background)',
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: '24px', marginRight: '12px' }}>
+          {getAchievementIcon(achievement.name)}
+        </span>
+        <div style={{ flex: 1 }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '4px'
+          }}>
+            <span style={{ fontWeight: 500, fontSize: '16px' }}>
+              {achievement.name}
+            </span>
+            <Tag color="default">
+              未获得
+            </Tag>
+          </div>
+          <div style={{
+            color: 'var(--text-secondary)',
+            fontSize: '14px',
+            lineHeight: '1.4'
+          }}>
+            {achievement.description}
+          </div>
+          <div style={{
+            marginTop: '4px',
+            fontSize: '12px',
+            color: 'var(--text-secondary)'
+          }}>
+            条件: {getConditionText(achievement.condition_type, achievement.condition_value)}
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+</Card>
         </Col>
       </Row>
 

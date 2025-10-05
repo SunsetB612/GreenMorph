@@ -28,7 +28,7 @@ from app.shared.models import (
     ErrorResponse, HealthResponse
 )
 from app.core.redesign.redesign_service import RedesignService
-from app.core.community.router import router as community_router
+
 
 # 全局服务实例
 redesign_service = None
@@ -82,11 +82,14 @@ def get_redesign_service() -> RedesignService:
 # 导入路由
 from app.core.redesign import router as redesign_router
 from app.core.user.router import router as auth_router
+from app.core.community.router import router as community_router
+from app.core.gamification.router import router as gamification_router
 
 # 注册路由
 app.include_router(redesign_router, prefix="/api/redesign", tags=["改造项目"])
 app.include_router(community_router, prefix="/api/community", tags=["社区"])
 app.include_router(auth_router, prefix="/api/auth", tags=["用户认证"])
+app.include_router(gamification_router, prefix="/api/gamification", tags=["激励模块"])
 
 
 @app.get("/")
