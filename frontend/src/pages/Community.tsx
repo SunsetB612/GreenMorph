@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Image } from 'antd';
 import {
   HeartFilled  // 添加这个
 } from '@ant-design/icons';
@@ -30,7 +31,8 @@ interface PostType {
   comments_count: number;
   created_at: string;
   updated_at: string;
-  images?: string[]; // 添加图片URL数组
+  images?: string[]; // 保持兼容性
+  images_with_id?: Array<{ id: number; file_path: string }>; // 新增包含ID的图片数据
   is_liked?: boolean; // 添加点赞状态字段
   user_name?: string;
 }
@@ -125,8 +127,8 @@ interface CreatePostFormValues {
 }
 
 // 创建帖子
+// 在创建帖子的 handleCreatePost 函数中修改图片处理部分
 const handleCreatePost = async (values: CreatePostFormValues) => {
-  // 添加认证检查
   if (!isAuthenticated || !user) {
     message.warning('请先登录后再发布帖子');
     return;
@@ -135,15 +137,14 @@ const handleCreatePost = async (values: CreatePostFormValues) => {
   setCreateLoading(true);
 
   try {
-    // 获取token
     const token = localStorage.getItem('auth_token');
 
-    // 创建帖子请求 - 添加Authorization头
+    // 创建帖子请求
     const postResponse = await fetch(`${API_BASE_URL}/api/community/posts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`  // 手动添加token
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
         title: values.title,
@@ -156,51 +157,42 @@ const handleCreatePost = async (values: CreatePostFormValues) => {
     }
 
     const newPost = await postResponse.json();
-    console.log('创建的帖子:', newPost);
     const postId = newPost.id;
 
     // 2. 上传图片（如果有）
-if (values.images && values.images.length > 0) {
-  console.log('开始上传图片，数量:', values.images.length);
+    if (values.images && values.images.length > 0) {
+      console.log('开始上传图片，数量:', values.images.length);
 
-  // 获取token
-  const token = localStorage.getItem('auth_token');
-  if (!token) {
-    console.error('未找到认证token');
-    message.error('上传图片失败：用户未认证');
-    return;
-  }
+      const uploadPromises = values.images.map(async (fileObj) => {
+        const file = fileObj.originFileObj;
 
-  const uploadPromises = values.images.map(async (fileObj) => {
-    const file = fileObj.originFileObj;
+        if (!file) {
+          console.warn('文件对象不存在，跳过');
+          return null;
+        }
 
-    if (!file) {
-      console.warn('文件对象不存在，跳过');
-      return null;
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const uploadResponse = await fetch(`${API_BASE_URL}/api/community/posts/${postId}/images`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text();
+          console.error('图片上传失败:', errorText);
+        }
+
+        return uploadResponse;
+      });
+
+      await Promise.allSettled(uploadPromises);
+      console.log('所有图片上传完成');
     }
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const uploadResponse = await fetch(`${API_BASE_URL}/api/community/posts/${postId}/images`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`  // 添加认证头
-      },
-      body: formData,
-    });
-
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      console.error('图片上传失败:', errorText);
-    }
-
-    return uploadResponse;
-  });
-
-  await Promise.allSettled(uploadPromises);
-  console.log('所有图片上传完成');
-}
 
     message.success('发布成功！');
     setCreateModalVisible(false);
@@ -218,6 +210,7 @@ if (values.images && values.images.length > 0) {
     setCreateLoading(false);
   }
 };
+
 const [previewVisible, setPreviewVisible] = useState(false);
 const [previewImage, setPreviewImage] = useState<string | null>(null);
 const [previewTitle, setPreviewTitle] = useState<string>('');
@@ -227,18 +220,98 @@ const handlePreview = (imgUrl: string, title: string) => {
   setPreviewVisible(true);
 };//放大图片
 
+// 添加编辑时删除图片的函数
+// 修改编辑时删除图片的函数
+const handleDeletePostImageInEdit = async (postId: number, imageId: number, imageIndex: number) => {
+  if (!isAuthenticated || !user) {
+    message.warning('请先登录后再操作');
+    return;
+  }
 
-  const [currentUser, setCurrentUser] = useState<{ id: number } | null>({ id: 1 }); // 暂时用假数据
+  confirm({
+    title: '确认删除图片',
+    icon: <ExclamationCircleFilled />,
+    content: '确定要删除这张图片吗？此操作不可恢复。',
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+          message.error('认证token不存在，请重新登录');
+          return;
+        }
+
+        // 调用删除图片接口
+        const response = await fetch(
+          `${API_BASE_URL}/api/community/posts/${postId}/images/${imageId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error('UNAUTHORIZED');
+          }
+          throw new Error('删除失败');
+        }
+
+        // 更新编辑中的帖子状态
+        if (editingPost) {
+          setEditingPost({
+            ...editingPost,
+            images: editingPost.images?.filter((_, i) => i !== imageIndex),
+            images_with_id: editingPost.images_with_id?.filter((_, i) => i !== imageIndex)
+          });
+        }
+
+        message.success('图片删除成功！');
+
+      } catch (error) {
+        if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+          message.error('登录已过期，请重新登录后继续操作');
+        } else {
+          message.error('删除图片失败，请稍后重试');
+        }
+        console.error('删除图片失败:', error);
+
+        // 如果删除失败，重新获取帖子详情
+        if (editingPost) {
+          fetchPostDetail(editingPost.id);
+        }
+      }
+    },
+  });
+};
+
+
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingPost, setEditingPost] = useState<PostType | null>(null);
   const [newImages, setNewImages] = useState<File[]>([]); // 新上传的图片
   const [editForm] = Form.useForm();
-// 获取帖子详情用于编辑
+// 修改获取帖子详情的函数
+// 修改获取帖子详情的函数
 const fetchPostDetail = async (postId: number) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/community/posts/${postId}`);
+    const token = localStorage.getItem('auth_token');
+    const response = await fetch(`${API_BASE_URL}/api/community/posts/${postId}`, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    });
     const data = await response.json();
-    setEditingPost(data);
+
+    // 处理新的数据结构
+    const postData = {
+      ...data,
+      images: data.images || [],
+      images_with_id: data.images || [] // 如果后端返回的是数组对象，直接使用
+    };
+
+    setEditingPost(postData);
 
     // 填充表单
     editForm.setFieldsValue({
@@ -265,6 +338,8 @@ const handleEdit = (post: PostType) => {
     message.error('无权编辑他人帖子');
     return;
   }
+
+
 
   fetchPostDetail(post.id);
 };
@@ -437,6 +512,14 @@ interface CommentType {
   const [commentPage, setCommentPage] = useState(1);
   const [commentTotal, setCommentTotal] = useState(0);
 
+
+
+// 添加评论图片预览函数
+const handleCommentPreview = (imgUrl: string, title:'') => {
+  setPreviewImage(imgUrl); // 评论图片已经是完整URL，不需要拼接API_BASE_URL
+  setPreviewTitle(title);
+  setPreviewVisible(true);
+};
 
 
 // 获取评论列表
@@ -806,7 +889,21 @@ const handleLikeComment = async (commentId: number) => {
     console.error('操作失败:', error);
   }
 };
-
+// 删除新图片的函数
+const handleDeleteNewImage = (index: number) => {
+  confirm({
+    title: '确认删除图片',
+    icon: <ExclamationCircleFilled />,
+    content: '确定要删除这张新上传的图片吗？',
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk() {
+      setNewImages(prev => prev.filter((_, i) => i !== index));
+      message.success('图片已移除');
+    },
+  });
+};
   const handleShare = (postId: number) => console.log('分享帖子:', postId);
 
   return (
@@ -886,12 +983,32 @@ const handleLikeComment = async (commentId: number) => {
 >
   <Upload
     multiple
-    listType="picture"
+    listType="picture-card"  // 改为 picture-card 显示更好
     beforeUpload={() => false} // 阻止自动上传
     accept="image/jpeg,image/png,image/webp"
     maxCount={9}
+    fileList={form.getFieldValue('images') || []}
+    onRemove={(file) => {
+      // 处理删除临时图片
+      const fileList = form.getFieldValue('images') || [];
+      const newFileList = fileList.filter((item: UploadFile) => item.uid !== file.uid);
+      form.setFieldsValue({ images: newFileList });
+      return true;
+    }}
+    onPreview={(file) => {
+      // 预览临时图片
+      if (file.originFileObj) {
+        const url = URL.createObjectURL(file.originFileObj);
+        setPreviewImage(url);
+        setPreviewTitle(file.name);
+        setPreviewVisible(true);
+      }
+    }}
   >
-    <Button icon={<UploadOutlined />}>选择图片（最多9张）</Button>
+    <div>
+      <PlusOutlined />
+      <div style={{ marginTop: 8 }}>上传图片</div>
+    </div>
   </Upload>
 </Form.Item>
     <Form.Item style={{ textAlign: 'right', marginBottom: 0 }}>
@@ -902,7 +1019,7 @@ const handleLikeComment = async (commentId: number) => {
     </Form.Item>
   </Form>
 </Modal>
-      <Modal
+<Modal
   title="编辑帖子"
   open={editModalVisible}
   onCancel={() => {
@@ -924,23 +1041,47 @@ const handleLikeComment = async (commentId: number) => {
       <TextArea rows={6} placeholder="请输入帖子内容" showCount maxLength={1000} />
     </Form.Item>
 
-    {/* 显示现有图片（只读，不能删除） */}
-    {editingPost?.images && editingPost.images.length > 0 && (
+    {/* 现有图片（已保存到数据库的） */}
+    {editingPost?.images_with_id && editingPost.images_with_id.length > 0 && (
       <Form.Item label="现有图片">
         <div style={{ fontSize: '12px', color: '#999', marginBottom: 8 }}>
-          当前图片（暂不支持删除）
+          已保存的图片
         </div>
         <Row gutter={[8, 8]}>
-          {editingPost.images.map((imgUrl, index) => (
-            <Col key={index} xs={8}>
+          {editingPost.images_with_id.map((img, index) => (
+            <Col key={img.id} xs={8} style={{ position: 'relative' }}>
               <img
-                src={`${API_BASE_URL}/${imgUrl}`}
+                src={`${API_BASE_URL}/${img.file_path}`}
                 alt={`现有图片 ${index + 1}`}
                 style={{
                   width: '100%',
                   height: '100px',
                   objectFit: 'cover',
                   borderRadius: '8px'
+                }}
+                onClick={() => handlePreview(img.file_path, '')}
+              />
+              <Button
+                type="primary"
+                danger
+                size="small"
+                icon={<DeleteOutlined />}
+                style={{
+                  position: 'absolute',
+                  top: '4px',
+                  right: '4px',
+                  minWidth: '24px',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeletePostImageInEdit(editingPost.id, img.id, index);
                 }}
               />
             </Col>
@@ -950,30 +1091,84 @@ const handleLikeComment = async (commentId: number) => {
     )}
 
     {/* 上传新图片 */}
-    <Form.Item label="添加新图片">
-      <Upload
-        multiple
-        listType="picture"
-        beforeUpload={(file) => {
-          setNewImages(prev => [...prev, file]);
-          return false; // 阻止自动上传
-        }}
-        accept="image/jpeg,image/png,image/webp"
-        showUploadList={false}
-      >
-        <Button icon={<UploadOutlined />}>选择新图片</Button>
-      </Upload>
-      {newImages.length > 0 && (
-        <div style={{ marginTop: 8, padding: '8px 12px', background: '#f5f5f5', borderRadius: '4px' }}>
-          <div>📸 已选择 {newImages.length} 张新图片：</div>
-          {newImages.map((file, index) => (
-            <div key={index} style={{ fontSize: '12px', marginTop: 4 }}>
-              • {file.name}
+<Form.Item label="添加新图片">
+  <Upload
+    multiple
+    listType="picture"
+    beforeUpload={(file) => {
+      setNewImages(prev => [...prev, file]);
+      return false;
+    }}
+    accept="image/jpeg,image/png,image/webp"
+    showUploadList={false}
+  >
+    <Button icon={<UploadOutlined />}>选择新图片</Button>
+  </Upload>
+
+  {newImages.length > 0 && (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ marginBottom: 8, fontSize: '12px', color: '#999' }}>
+        新选择的图片（保存帖子后会上传）
+      </div>
+      <Row gutter={[8, 8]}>
+        {newImages.map((file, index) => (
+          <Col key={index} xs={8} style={{ position: 'relative' }}>
+            <img
+              src={URL.createObjectURL(file)}
+              alt={`新图片 ${index + 1}`}
+              style={{
+                width: '100%',
+                height: '100px',
+                objectFit: 'cover',
+                borderRadius: '8px'
+              }}
+              onClick={() => {
+                const url = URL.createObjectURL(file);
+                setPreviewImage(url);
+                setPreviewTitle(file.name);
+                setPreviewVisible(true);
+              }}
+            />
+            <Button
+              type="primary"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              style={{
+                position: 'absolute',
+                top: '4px',
+                right: '4px',
+                minWidth: '24px',
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteNewImage(index);
+              }}
+            />
+            <div style={{
+              fontSize: '12px',
+              color: '#666',
+              textAlign: 'center',
+              marginTop: '4px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {file.name}
             </div>
-          ))}
-        </div>
-      )}
-    </Form.Item>
+          </Col>
+        ))}
+      </Row>
+    </div>
+  )}
+</Form.Item>
 
     <Form.Item style={{ textAlign: 'right', marginBottom: 0 }}>
       <Space>
@@ -1093,7 +1288,7 @@ const handleLikeComment = async (commentId: number) => {
               borderRadius: '6px',
               cursor: 'pointer'
             }}
-            onClick={() => handlePreview(imgUrl, '评论图片')}
+            onClick={() => handleCommentPreview(imgUrl,"")}
           />
         </Col>
       ))}
@@ -1241,20 +1436,25 @@ const handleLikeComment = async (commentId: number) => {
     />
   </Col>
 ))}
-<Modal
-  visible={previewVisible}
-  title={previewTitle}
-  footer={null}
-  onCancel={() => setPreviewVisible(false)}
->
-  {previewImage && (
-    <img
-      alt={previewTitle}
-      style={{ width: '100%' }}
-      src={previewImage}
-    />
-  )}
-</Modal>
+<Image
+  width={0} // 设置为0让图片自适应
+  style={{ display: 'none' }}
+  src={previewImage || ''}
+  preview={{
+    visible: previewVisible,
+    onVisibleChange: (visible) => {
+      setPreviewVisible(visible);
+      if (!visible) {
+        // 关闭时释放临时图片URL
+        if (previewImage && previewImage.startsWith('blob:')) {
+          URL.revokeObjectURL(previewImage);
+        }
+        setPreviewImage(null);
+      }
+    },
+    zIndex: 9999
+  }}
+/>
 
           <div style={{
             display: 'flex',
