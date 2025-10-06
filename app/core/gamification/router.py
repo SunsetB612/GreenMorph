@@ -9,10 +9,8 @@ from app.core.redesign.models import RedesignProject
 from app.core.user.models import User
 from app.core.community.models import Post, Comment, Like
 from loguru import logger
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from app.database import get_db
-
+from datetime import datetime
+from sqlalchemy import desc
 router = APIRouter()
 router = APIRouter()
 
@@ -253,6 +251,129 @@ async def check_achievements(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/leaderboard")
-async def get_leaderboard():
+async def get_leaderboard(
+        db: Session = Depends(get_db),
+        limit: int = 50
+):
     """获取积分排行榜"""
-    pass
+    try:
+        # 直接按 users.points 字段排序
+        leaderboard_data = db.query(
+            User.id,
+            User.username,
+            User.points,
+            User.skill_level
+        ).filter(
+            User.is_active == True
+        ).order_by(
+            User.points.desc()
+        ).limit(limit).all()
+
+        # 构建响应数据
+        leaderboard = []
+        current_rank = 1
+        previous_points = None
+        skip_rank = 0
+
+        for i, (user_id, username, points, skill_level) in enumerate(leaderboard_data):
+            # 处理并列排名
+            if previous_points is not None and points == previous_points:
+                skip_rank += 1
+            else:
+                current_rank += skip_rank
+                skip_rank = 0
+
+            # 实时计算等级（不依赖数据库中的skill_level）
+            if points >= 200:
+                current_level = "advanced"
+            elif points >= 100:
+                current_level = "intermediate"
+            else:
+                current_level = "beginner"
+
+            leaderboard.append({
+                "rank": current_rank,
+                "user_id": user_id,
+                "username": username,
+                "points": points or 0,
+                "skill_level": current_level  # 使用实时计算的等级
+            })
+
+            previous_points = points
+            current_rank += 1
+
+        return {
+            "code": 200,
+            "message": "获取积分排行榜成功",
+            "data": {
+                "leaderboard": leaderboard,
+                "total_users": len(leaderboard),
+                "type": "points",
+                "updated_at": datetime.now().isoformat()
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"获取积分排行榜失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"获取积分排行榜失败: {str(e)}",
+            "data": []
+        }
+
+
+@router.get("/leaderboard/user/{user_id}")
+async def get_user_ranking(user_id: int, db: Session = Depends(get_db)):
+    """获取指定用户在积分排行榜中的排名"""
+    try:
+        # 获取用户信息
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {
+                "code": 404,
+                "message": "用户不存在",
+                "data": None
+            }
+
+        # 计算用户在积分排行榜中的排名
+        users_with_more_points = db.query(User).filter(
+            User.points > user.points,
+            User.is_active == True
+        ).count()
+
+        user_rank = users_with_more_points + 1
+
+        # 总活跃用户数
+        total_active_users = db.query(User).filter(User.is_active == True).count()
+
+        # 实时计算等级
+        points = user.points or 0
+        if points >= 200:
+            current_level = "advanced"
+        elif points >= 100:
+            current_level = "intermediate"
+        else:
+            current_level = "beginner"
+
+        return {
+            "code": 200,
+            "message": "获取用户排名成功",
+            "data": {
+                "user_id": user_id,
+                "username": user.username,
+                "points": points,
+                "skill_level": current_level,  # 使用实时计算的等级
+                "rank": user_rank,
+                "total_users": total_active_users,
+                "percentile": round((total_active_users - user_rank) / total_active_users * 100,
+                                    1) if total_active_users > 0 else 0
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"获取用户排名失败: {str(e)}")
+        return {
+            "code": 500,
+            "message": f"获取用户排名失败: {str(e)}",
+            "data": None
+        }

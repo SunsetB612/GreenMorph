@@ -26,7 +26,7 @@ import {
   EnvironmentOutlined,
   CalendarOutlined,
   LoginOutlined,
-  SyncOutlined
+  CrownOutlined
 } from '@ant-design/icons';
 
 import { useAuthStore } from '../store/authStore';
@@ -34,22 +34,6 @@ import { useNavigate } from 'react-router-dom';
 import {checkAndNotifyAchievements} from "../utils/achievementNotifier";
 
 const { Title, Paragraph } = Typography;
-const Profile: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('posts');
-  const [userInfo, setUserInfo] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editForm] = Form.useForm();
-  const { user, isAuthenticated, checkAuth } = useAuthStore();
-  const navigate = useNavigate();
-  const [userAchievements, setUserAchievements] = useState<Achievement[]>([]);
-  const [achievementsLoading, setAchievementsLoading] = useState(false);
-  const [achievementStats, setAchievementStats] = useState({
-    total: 0,
-    earned: 0,
-    progress: 0
-  });
-
 interface Achievement {
   id: number;
   name: string;
@@ -65,6 +49,7 @@ interface Achievement {
   is_completed: boolean;
 }
 
+
 interface UserAchievementResponse {
   code: number;
   message: string;
@@ -76,6 +61,57 @@ interface UserAchievementResponse {
     achievements: Achievement[];
   };
 }
+interface UserRankingResponse {
+  code: number;
+  message: string;
+  data: {
+    user_id: number;
+    username: string;
+    points: number;
+    skill_level: string;
+    rank: number;
+    total_users: number;
+    percentile: number;
+  };
+}
+interface LeaderboardUser {
+  rank: number;
+  user_id: number;
+  username: string;
+  points: number;
+  skill_level: string;
+}
+
+interface LeaderboardResponse {
+  code: number;
+  message: string;
+  data: {
+    leaderboard: LeaderboardUser[];
+    total_users: number;
+    type: string;
+    updated_at: string;
+  };
+}
+
+const Profile: React.FC = () => {
+  const [activeTab, setActiveTab] = useState('posts');
+  const [userInfo, setUserInfo] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editForm] = Form.useForm();
+  const { user, isAuthenticated, checkAuth } = useAuthStore();
+  const navigate = useNavigate();
+  const [userAchievements, setUserAchievements] = useState<Achievement[]>([]);
+  const [achievementsLoading, setAchievementsLoading] = useState(false);
+   const [userRanking, setUserRanking] = useState<any>(null);
+  const [rankingLoading, setRankingLoading] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
+const [leaderboardLoading, setLeaderboardLoading] = useState<boolean>(false);
+  const [achievementStats, setAchievementStats] = useState({
+    total: 0,
+    earned: 0,
+    progress: 0
+  });
 
   useEffect(() => {
     const loadUserInfo = async () => {
@@ -255,6 +291,134 @@ useEffect(() => {
 
   loadUserInfo();
 }, [isAuthenticated, user, checkAuth]);
+
+// 获取排行榜
+const fetchLeaderboard = async (limit: number = 10): Promise<void> => {
+  setLeaderboardLoading(true);
+  try {
+    const response = await fetch(`http://localhost:8000/api/gamification/leaderboard?limit=${limit}`);
+    const result: LeaderboardResponse = await response.json();
+
+    if (result.code === 200) {
+      setLeaderboard(result.data.leaderboard);
+    } else {
+      message.error('获取排行榜失败');
+    }
+  } catch (error) {
+    console.error('获取排行榜失败:', error);
+    message.error('获取排行榜失败');
+  } finally {
+    setLeaderboardLoading(false);
+  }
+};
+
+// 获取用户排名（修复版）
+const fetchUserRanking = async (userId: number): Promise<void> => {
+  setRankingLoading(true);
+  try {
+    // 先获取排行榜数据来计算准确排名
+    const response = await fetch(`http://localhost:8000/api/gamification/leaderboard?limit=100`);
+    const result: LeaderboardResponse = await response.json();
+
+    if (result.code === 200) {
+      // 在排行榜中查找当前用户的准确排名
+      const currentUserRank = result.data.leaderboard.findIndex(
+        user => user.user_id === userId
+      );
+
+      if (currentUserRank !== -1) {
+        // 找到用户，排名是索引+1
+        const userData = result.data.leaderboard[currentUserRank];
+        setUserRanking({
+          user_id: userId,
+          username: userData.username,
+          points: userData.points,
+          skill_level: userData.skill_level,
+          rank: currentUserRank + 1,
+          total_users: result.data.total_users,
+          percentile: result.data.total_users > 0 ?
+            Math.round(((result.data.total_users - (currentUserRank + 1)) / result.data.total_users) * 100) : 0
+        });
+      } else {
+        // 用户不在前100名，需要单独查询
+        const userResponse = await fetch(`http://localhost:8000/api/gamification/leaderboard/user/${userId}`);
+        const userResult: UserRankingResponse = await userResponse.json();
+
+        if (userResult.code === 200) {
+          setUserRanking(userResult.data);
+        } else {
+          message.error('获取用户排名失败');
+        }
+      }
+    } else {
+      message.error('获取排行榜失败');
+    }
+  } catch (error) {
+    console.error('获取用户排名失败:', error);
+    message.error('获取用户排名失败');
+  } finally {
+    setRankingLoading(false);
+  }
+};
+useEffect(() => {
+  const loadUserInfo = async () => {
+    if (isAuthenticated && user) {
+      setUserInfo(user);
+      // 获取用户成就数据
+      await fetchUserAchievements(user.id);
+      // 获取用户排名
+      await fetchUserRanking(user.id);
+      // 获取排行榜
+      await fetchLeaderboard(10);
+      await checkAndNotifyAchievements(user.id, () => {
+        fetchUserAchievements(user.id);
+      });
+      setLoading(false);
+    } else {
+      await checkAuth();
+      setLoading(false);
+    }
+  };
+
+  loadUserInfo();
+}, [isAuthenticated, user, checkAuth]);
+
+// 根据积分实时计算等级
+const calculateRealTimeLevel = (points: number): string => {
+  if (points >= 200) return "advanced";
+  if (points >= 100) return "intermediate";
+  return "beginner";
+};
+
+// 等级显示函数
+const getLevelName = (skillLevel: string, points?: number): string => {
+  // 如果提供了积分，优先使用实时计算的等级
+  if (points !== undefined) {
+    const realTimeLevel = calculateRealTimeLevel(points);
+    const levelMap: Record<string, string> = {
+      'beginner': '✨ 新秀',
+      'intermediate': '🌟 精英',
+      'advanced': '💎 大师'
+    };
+    return levelMap[realTimeLevel] || '未知等级';
+  }
+
+  // 否则使用数据库中的等级
+  const levelMap: Record<string, string> = {
+    'beginner': '✨ 新秀',
+    'intermediate': '🌟 精英',
+    'advanced': '💎 大师'
+  };
+  return levelMap[skillLevel] || '未知等级';
+};
+
+// 积分进度计算函数（根据实际积分规则）
+const calculatePointsProgress = (points: number) => {
+  // 根据你的积分等级规则计算进度
+  if (points >= 200) return 100; // 进阶，满进度
+  if (points >= 100) return 50 + ((points - 100) / 100) * 50; // 中级到进阶的进度
+  return (points / 100) * 50; // 新手到中级的进度
+};
 
   // 如果正在加载
   if (loading) {
@@ -496,38 +660,141 @@ useEffect(() => {
     </div>
   </Card>
           {/* 等级和积分 */}
-          <Card title="等级信息" style={{ marginBottom: '24px' }}>
-            <div style={{ textAlign: 'center' }}>
-              <TrophyOutlined style={{ fontSize: '32px', color: 'var(--warning-color)', marginBottom: '8px' }} />
-              <Title level={4} style={{ marginBottom: '8px' }}>
-                {userInfo.skill_level === 'beginner' ? '环保新手' : 
-                 userInfo.skill_level === 'intermediate' ? '改造达人' : '创意大师'}
-              </Title>
-              <div style={{ marginBottom: '8px' }}>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-                  等级根据积分自动计算
-                </span>
-              </div>
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ 
-                  background: 'var(--card-background)', 
-                  borderRadius: '10px', 
-                  height: '20px',
-                  marginBottom: '8px'
-                }}>
-                  <div style={{ 
-                    background: 'linear-gradient(90deg, var(--success-color), var(--primary-color))', 
-                    borderRadius: '10px', 
-                    height: '100%',
-                    width: `${Math.min((userInfo.points || 0) / 2000 * 100, 100)}%`
-                  }} />
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {userInfo.points || 0} / 2000 积分
-                </div>
-              </div>
-            </div>
-          </Card>
+<Card title="等级信息" style={{ marginBottom: '24px' }} loading={rankingLoading}>
+  <div style={{ textAlign: 'center' }}>
+    <CrownOutlined style={{ fontSize: '32px', color: '#ffd700', marginBottom: '8px' }} />
+    <Title level={4} style={{ marginBottom: '8px' }}>
+  {userInfo ? getLevelName(userInfo.skill_level, userInfo.points) : '加载中...'}
+</Title>
+
+    {/* 显示排名信息 */}
+    {userRanking && (
+      <div style={{ marginBottom: '8px' }}>
+        <span style={{ color: 'var(--primary-color)', fontWeight: 500 }}>
+          全站排名: 第{userRanking.rank}名
+        </span>
+        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+          击败了 {userRanking.percentile}% 的用户
+        </div>
+      </div>
+    )}
+
+    <div style={{ marginBottom: '8px' }}>
+      <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+        等级根据积分自动计算
+      </span>
+    </div>
+
+    <div style={{ marginBottom: '16px' }}>
+      <div style={{
+        background: 'var(--card-background)',
+        borderRadius: '10px',
+        height: '20px',
+        marginBottom: '8px'
+      }}>
+        <div style={{
+          background: 'linear-gradient(90deg, var(--success-color), var(--primary-color))',
+          borderRadius: '10px',
+          height: '100%',
+          width: `${userInfo ? calculatePointsProgress(userInfo.points || 0) : 0}%`
+        }} />
+      </div>
+      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+        {userInfo?.points || 0} 积分
+        {userRanking && ` • 全站第${userRanking.rank}名`}
+      </div>
+    </div>
+
+    {/* 等级规则说明 */}
+    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+      <div>0-99分: ✨ 新秀</div>
+      <div>100-199分: 🌟 精英</div>
+      <div>200分以上: 💎 大师</div>
+    </div>
+  </div>
+</Card>
+{/* 排行榜 */}
+<Card
+  title="积分排行榜"
+  style={{ marginBottom: '24px' }}
+  loading={leaderboardLoading}
+>
+  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+    {leaderboard.map((user) => (
+      <div
+        key={user.user_id}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '8px 12px',
+          marginBottom: '8px',
+          borderRadius: '6px',
+          backgroundColor: user.user_id === userInfo?.id ? 'var(--primary-color-light)' : 'transparent'
+        }}
+      >
+        {/* 排名 - 修复前三名颜色 */}
+        <div style={{
+          width: '24px',
+          height: '24px',
+          borderRadius: '50%',
+          background:
+            user.rank === 1 ? '#ffd700' : // 金牌 - 金色
+            user.rank === 2 ? '#c0c0c0' : // 银牌 - 银色
+            user.rank === 3 ? '#cd7f32' : // 铜牌 - 古铜色
+            'var(--card-background)',
+          color: user.rank <= 3 ? '#000' : 'var(--text-color)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '12px',
+          fontWeight: 'bold',
+          marginRight: '12px',
+          border: user.rank <= 3 ? '2px solid transparent' : 'none'
+        }}>
+          {user.rank}
+        </div>
+
+        {/* 用户信息 */}
+        <div style={{ flex: 1 }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span style={{
+              fontWeight: user.user_id === userInfo?.id ? 'bold' : 'normal'
+            }}>
+              {user.username}
+              {user.user_id === userInfo?.id && ' (我)'}
+            </span>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+              {user.points}分
+            </span>
+          </div>
+          <div style={{
+            fontSize: '12px',
+            color: 'var(--text-secondary)',
+            marginTop: '2px'
+          }}>
+            {getLevelName(user.skill_level)}
+            {user.rank <= 3 && (
+              <span style={{
+                marginLeft: '8px',
+                color:
+                  user.rank === 1 ? '#ffd700' :
+                  user.rank === 2 ? '#c0c0c0' :
+                  '#cd7f32',
+                fontWeight: 'bold'
+              }}>
+                {user.rank === 1 ? '🥇' : user.rank === 2 ? '🥈' : '🥉'}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+</Card>
 
           {/* 成就徽章 */}
   <Card title="成就徽章" loading={achievementsLoading}>
