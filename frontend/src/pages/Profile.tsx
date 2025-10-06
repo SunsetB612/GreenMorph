@@ -92,6 +92,37 @@ interface LeaderboardResponse {
     updated_at: string;
   };
 }
+// 用户统计接口类型
+interface UserStatsData {
+  user_id: number;
+  posts_count: number;
+  total_likes: number;
+}
+
+interface UserStatsResponse {
+  code: number;
+  message: string;
+  data: UserStatsData;
+}
+interface Post {
+  id: number;
+  user_id: number;
+  user_name: string;
+  title: string;
+  content: string;
+  likes_count: number;
+  comments_count: number;
+  created_at: string;
+  updated_at: string;
+  images: string[];
+}
+
+interface PostsResponse {
+  total: number;
+  page: number;
+  size: number;
+  items: Post[];
+}
 
 const Profile: React.FC = () => {
   const [activeTab, setActiveTab] = useState('posts');
@@ -107,26 +138,18 @@ const Profile: React.FC = () => {
   const [rankingLoading, setRankingLoading] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
 const [leaderboardLoading, setLeaderboardLoading] = useState<boolean>(false);
+const [userStats, setUserStats] = useState<UserStatsData | null>(null);
+const [statsLoading, setStatsLoading] = useState<boolean>(false);
+const [userPosts, setUserPosts] = useState<Post[]>([]);
+const [postsLoading, setPostsLoading] = useState<boolean>(false);
+const [likedPosts, setLikedPosts] = useState<Post[]>([]);
+const [likedPostsLoading, setLikedPostsLoading] = useState<boolean>(false);
   const [achievementStats, setAchievementStats] = useState({
     total: 0,
     earned: 0,
     progress: 0
   });
 
-  useEffect(() => {
-    const loadUserInfo = async () => {
-      if (isAuthenticated && user) {
-        setUserInfo(user);
-        setLoading(false);
-      } else {
-        // 尝试检查认证状态
-        await checkAuth();
-        setLoading(false);
-      }
-    };
-    
-    loadUserInfo();
-  }, [isAuthenticated, user, checkAuth]);
 
   // 打开编辑模态框
   const handleEditProfile = () => {
@@ -173,28 +196,6 @@ const [leaderboardLoading, setLeaderboardLoading] = useState<boolean>(false);
     followers: 89,
     following: 156
   };
-
-  const myPosts = [
-    {
-      id: 1,
-      title: '旧牛仔裤改造收纳袋',
-      content: '用旧牛仔裤做了一个超实用的收纳袋...',
-      likes: 24,
-      comments: 8,
-      time: '2天前',
-      tags: ['旧物改造', '收纳']
-    },
-    {
-      id: 2,
-      title: '塑料瓶变身花瓶',
-      content: '用废弃的塑料瓶制作了漂亮的花瓶...',
-      likes: 18,
-      comments: 5,
-      time: '5天前',
-      tags: ['塑料瓶', '花瓶']
-    }
-  ];
-
   // 成就图标映射
 const getAchievementIcon = (name: string) => {
   const iconMap: { [key: string]: string } = {
@@ -210,16 +211,6 @@ const getAchievementIcon = (name: string) => {
   return iconMap[name] || '🏆';
 };
 
-// 条件文本显示
-const getConditionText = (conditionType: string, conditionValue: number) => {
-  const conditionMap: { [key: string]: string } = {
-    'post_count': `发布${conditionValue}个帖子`,
-    'likes_received': `获得${conditionValue}个点赞`,
-    'comment_count': `发表${conditionValue}条评论`,
-    'project_count': `完成${conditionValue}个项目`
-  };
-  return conditionMap[conditionType] || `${conditionType}: ${conditionValue}`;
-};
 
  const fetchUserAchievements = async (userId: number) => {
   setAchievementsLoading(true);
@@ -272,25 +263,6 @@ const getConditionText = (conditionType: string, conditionValue: number) => {
     setAchievementsLoading(false);
   }
 };
-useEffect(() => {
-  const loadUserInfo = async () => {
-    if (isAuthenticated && user) {
-      setUserInfo(user);
-      // 获取用户成就数据
-      await fetchUserAchievements(user.id);
-      await checkAndNotifyAchievements(user.id, () => {
-        // 成就获得后刷新成就列表
-        fetchUserAchievements(user.id);
-      });
-      setLoading(false);
-    } else {
-      await checkAuth();
-      setLoading(false);
-    }
-  };
-
-  loadUserInfo();
-}, [isAuthenticated, user, checkAuth]);
 
 // 获取排行榜
 const fetchLeaderboard = async (limit: number = 10): Promise<void> => {
@@ -361,15 +333,19 @@ const fetchUserRanking = async (userId: number): Promise<void> => {
   }
 };
 useEffect(() => {
-  const loadUserInfo = async () => {
+  const loadUserInfo = async (): Promise<void> => {
     if (isAuthenticated && user) {
       setUserInfo(user);
-      // 获取用户成就数据
-      await fetchUserAchievements(user.id);
-      // 获取用户排名
-      await fetchUserRanking(user.id);
-      // 获取排行榜
-      await fetchLeaderboard(10);
+      // 先获取所有数据
+      await Promise.all([
+        fetchUserAchievements(user.id),
+        fetchUserRanking(user.id),
+        fetchLeaderboard(10),
+        fetchUserStats(user.id),
+        fetchUserPosts(user.id),
+        fetchLikedPosts(user.id)
+      ]);
+      // 然后再检查成就
       await checkAndNotifyAchievements(user.id, () => {
         fetchUserAchievements(user.id);
       });
@@ -418,6 +394,72 @@ const calculatePointsProgress = (points: number) => {
   if (points >= 200) return 100; // 进阶，满进度
   if (points >= 100) return 50 + ((points - 100) / 100) * 50; // 中级到进阶的进度
   return (points / 100) * 50; // 新手到中级的进度
+};
+// 获取用户统计
+const fetchUserStats = async (userId: number): Promise<void> => {
+  setStatsLoading(true);
+  try {
+    const response = await fetch(`http://localhost:8000/api/community/users/${userId}/stats`);
+    const result: UserStatsResponse = await response.json();
+
+    if (result.code === 200) {
+      setUserStats(result.data);
+    } else {
+      message.error('获取用户统计失败');
+    }
+  } catch (error) {
+    console.error('获取用户统计失败:', error);
+    message.error('获取用户统计失败');
+  } finally {
+    setStatsLoading(false);
+  }
+};
+// 获取用户帖子（使用专用接口）
+const fetchUserPosts = async (userId: number): Promise<void> => {
+  setPostsLoading(true);
+  try {
+    const response = await fetch(`http://localhost:8000/api/community/users/${userId}/posts`);
+    const result: PostsResponse = await response.json();
+
+    if (result.items) {
+      console.log('获取到的用户帖子:', {
+        total: result.total,
+        postsCount: result.items.length,
+        posts: result.items
+      });
+      setUserPosts(result.items);
+    } else {
+      message.error('获取用户帖子失败');
+    }
+  } catch (error) {
+    console.error('获取用户帖子失败:', error);
+    message.error('获取用户帖子失败');
+  } finally {
+    setPostsLoading(false);
+  }
+};
+const fetchLikedPosts = async (userId: number): Promise<void> => {
+  setLikedPostsLoading(true);
+  try {
+    const response = await fetch(`http://localhost:8000/api/community/users/${userId}/liked-posts`);
+    const result: PostsResponse = await response.json();
+
+    if (result.items) {
+      console.log('获取到的点赞帖子:', {
+        total: result.total,
+        postsCount: result.items.length,
+        posts: result.items
+      });
+      setLikedPosts(result.items);
+    } else {
+      message.error('获取点赞帖子失败');
+    }
+  } catch (error) {
+    console.error('获取点赞帖子失败:', error);
+    message.error('获取点赞帖子失败');
+  } finally {
+    setLikedPostsLoading(false);
+  }
 };
 
   // 如果正在加载
@@ -508,35 +550,37 @@ const calculatePointsProgress = (points: number) => {
             </div>
 
             <Row gutter={[16, 16]}>
-              <Col span={6}>
-                <Statistic 
-                  title="发布作品" 
-                  value={stats.posts} 
-                  prefix={<EditOutlined />}
-                />
-              </Col>
-              <Col span={6}>
-                <Statistic 
-                  title="获得点赞" 
-                  value={stats.likes} 
-                  prefix={<HeartOutlined />}
-                />
-              </Col>
-              <Col span={6}>
-                <Statistic 
-                  title="粉丝" 
-                  value={stats.followers} 
-                  prefix={<UserOutlined />}
-                />
-              </Col>
-              <Col span={6}>
-                <Statistic 
-                  title="关注" 
-                  value={stats.following} 
-                  prefix={<UserOutlined />}
-                />
-              </Col>
-            </Row>
+  <Col span={6}>
+    <Statistic
+      title="发布作品"
+      value={userStats?.posts_count || 0}
+      prefix={<EditOutlined />}
+      loading={statsLoading}
+    />
+  </Col>
+  <Col span={6}>
+    <Statistic
+      title="获得点赞"
+      value={userStats?.total_likes || 0}
+      prefix={<HeartOutlined />}
+      loading={statsLoading}
+    />
+  </Col>
+  <Col span={6}>
+    <Statistic
+      title="粉丝"
+      value={stats.followers}
+      prefix={<UserOutlined />}
+    />
+  </Col>
+  <Col span={6}>
+    <Statistic
+      title="关注"
+      value={stats.following}
+      prefix={<UserOutlined />}
+    />
+  </Col>
+</Row>
 
             <Divider />
 
@@ -563,64 +607,209 @@ const calculatePointsProgress = (points: number) => {
               onChange={setActiveTab}
               items={[
                 {
-                  key: 'posts',
-                  label: '我的作品',
-                  children: (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {myPosts.map((item) => (
-                        <div key={item.id} style={{ 
-                          padding: '16px',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '8px',
-                          backgroundColor: 'var(--card-background)'
-                        }}>
-                          <div style={{ 
-                            fontWeight: 500, 
-                            fontSize: '16px',
-                            marginBottom: '8px',
-                            color: 'var(--text-color)'
-                          }}>
-                            {item.title}
-                          </div>
-                          <div style={{ 
-                            color: 'var(--text-secondary)',
-                            marginBottom: '12px',
-                            lineHeight: '1.5'
-                          }}>
-                            {item.content}
-                          </div>
-                          <div style={{ marginBottom: '12px' }}>
-                            {item.tags.map(tag => (
-                              <Tag key={tag} style={{ marginRight: '4px', marginBottom: '4px' }}>
-                                {tag}
-                              </Tag>
-                            ))}
-                          </div>
-                          <div style={{ 
-                            color: 'var(--text-secondary)', 
-                            fontSize: '12px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '16px'
-                          }}>
-                            <span><HeartOutlined /> {item.likes}</span>
-                            <span><MessageOutlined /> {item.comments}</span>
-                            <span>{item.time}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                },
+  key: 'posts',
+  label: '我的作品',
+  children: (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {postsLoading ? (
+        <div style={{ textAlign: 'center', padding: '40px' }}>
+          <Spin size="large" />
+        </div>
+      ) : userPosts.length > 0 ? (
+        userPosts.map((post) => (
+          <div key={post.id} style={{
+            padding: '16px',
+            border: '1px solid var(--border-color)',
+            borderRadius: '8px',
+            backgroundColor: 'var(--card-background)'
+          }}>
+            <div style={{
+              fontWeight: 500,
+              fontSize: '16px',
+              marginBottom: '8px',
+              color: 'var(--text-color)'
+            }}>
+              {post.title}
+            </div>
+            <div style={{
+              color: 'var(--text-secondary)',
+              marginBottom: '12px',
+              lineHeight: '1.5'
+            }}>
+              {post.content}
+            </div>
+
+            {/* 显示帖子图片 - 修复URL */}
+            {post.images && post.images.length > 0 && (
+              <div style={{ marginBottom: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {post.images.slice(0, 3).map((image, index) => (
+                  <img
+                    key={index}
+                    src={image.startsWith('http') ? image : `http://localhost:8000/${image}`}
+                    alt={`帖子图片 ${index + 1}`}
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      objectFit: 'cover',
+                      borderRadius: '6px'
+                    }}
+                    onError={(e) => {
+                      // 图片加载失败时隐藏
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ))}
+                {post.images.length > 3 && (
+                  <div style={{
+                    width: '80px',
+                    height: '80px',
+                    background: 'var(--card-background)',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--text-secondary)',
+                    fontSize: '12px',
+                    border: '1px dashed var(--border-color)'
+                  }}>
+                    +{post.images.length - 3}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{
+              color: 'var(--text-secondary)',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px'
+            }}>
+              <span><HeartOutlined /> {post.likes_count}</span>
+              <span><MessageOutlined /> {post.comments_count}</span>
+              <span>{new Date(post.created_at).toLocaleDateString()}</span>
+            </div>
+          </div>
+        ))
+      ) : (
+        <div style={{
+          textAlign: 'center',
+          padding: '40px',
+          color: 'var(--text-secondary)'
+        }}>
+          还没有发布任何作品
+        </div>
+      )}
+    </div>
+  )
+},
                 {
-                  key: 'likes',
-                  label: '点赞',
-                  children: (
-                    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-                      暂无点赞内容
-                    </div>
-                  )
-                }
+  key: 'likes',
+  label: '点赞',
+  children: (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {likedPostsLoading ? (
+        <div style={{ textAlign: 'center', padding: '40px' }}>
+          <Spin size="large" />
+        </div>
+      ) : likedPosts.length > 0 ? (
+        likedPosts.map((post) => (
+          <div key={post.id} style={{
+            padding: '16px',
+            border: '1px solid var(--border-color)',
+            borderRadius: '8px',
+            backgroundColor: 'var(--card-background)'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              marginBottom: '8px'
+            }}>
+              <UserOutlined style={{ marginRight: '8px', color: 'var(--text-secondary)' }} />
+              <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                {post.user_name}
+              </span>
+            </div>
+
+            <div style={{
+              fontWeight: 500,
+              fontSize: '16px',
+              marginBottom: '8px',
+              color: 'var(--text-color)'
+            }}>
+              {post.title}
+            </div>
+            <div style={{
+              color: 'var(--text-secondary)',
+              marginBottom: '12px',
+              lineHeight: '1.5'
+            }}>
+              {post.content}
+            </div>
+
+            {/* 显示帖子图片 */}
+            {post.images && post.images.length > 0 && (
+              <div style={{ marginBottom: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {post.images.slice(0, 3).map((image, index) => (
+                  <img
+                    key={index}
+                    src={image.startsWith('http') ? image : `http://localhost:8000/${image}`}
+                    alt={`帖子图片 ${index + 1}`}
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      objectFit: 'cover',
+                      borderRadius: '6px'
+                    }}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ))}
+                {post.images.length > 3 && (
+                  <div style={{
+                    width: '80px',
+                    height: '80px',
+                    background: 'var(--card-background)',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--text-secondary)',
+                    fontSize: '12px',
+                    border: '1px dashed var(--border-color)'
+                  }}>
+                    +{post.images.length - 3}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{
+              color: 'var(--text-secondary)',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px'
+            }}>
+              <span><HeartOutlined style={{ color: 'red' }} /> {post.likes_count}</span>
+              <span><MessageOutlined /> {post.comments_count}</span>
+              <span>{new Date(post.created_at).toLocaleDateString()}</span>
+            </div>
+          </div>
+        ))
+      ) : (
+        <div style={{
+          textAlign: 'center',
+          padding: '40px',
+          color: 'var(--text-secondary)'
+        }}>
+          还没有点赞过任何帖子
+        </div>
+      )}
+    </div>
+  )
+}
               ]}
             />
           </Card>

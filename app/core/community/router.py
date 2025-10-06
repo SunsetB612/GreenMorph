@@ -905,3 +905,138 @@ async def delete_post_image(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"删除帖子图片失败: {str(e)}")
+
+
+@router.get("/users/{user_id}/stats")
+async def get_user_stats(
+        user_id: int,
+        db: Session = Depends(get_db)
+):
+    """获取用户帖子统计（发布作品数和总点赞数）"""
+    try:
+        # 获取用户发布的帖子数量
+        posts_count = db.query(Post).filter(Post.user_id == user_id).count()
+
+        # 获取用户所有帖子的总点赞数
+        total_likes = db.query(func.coalesce(func.sum(Post.likes_count), 0)).filter(
+            Post.user_id == user_id
+        ).scalar()
+
+        return {
+            "code": 200,
+            "message": "获取用户统计成功",
+            "data": {
+                "user_id": user_id,
+                "posts_count": posts_count,
+                "total_likes": total_likes
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取用户统计失败: {str(e)}")
+
+
+@router.get("/users/{user_id}/posts")
+async def get_user_posts(
+        user_id: int,
+        page: int = Query(1, ge=1),
+        size: int = Query(10, ge=1, le=50),
+        db: Session = Depends(get_db)
+):
+    """获取指定用户的帖子"""
+    try:
+        # 查询用户的帖子
+        query = db.query(Post).filter(Post.user_id == user_id)
+        total = query.count()
+
+        posts = query.order_by(Post.created_at.desc()) \
+            .offset((page - 1) * size) \
+            .limit(size) \
+            .all()
+
+        items = []
+        for post in posts:
+            images = db.query(CommunityImage.file_path) \
+                .filter(
+                CommunityImage.target_id == post.id,
+                CommunityImage.image_type == ImageType.POST
+            ) \
+                .all()
+
+            user = db.query(User.username).filter(User.id == post.user_id).first()
+
+            items.append({
+                "id": post.id,
+                "user_id": post.user_id,
+                "user_name": user.username if user else f"用户{post.user_id}",
+                "title": post.title,
+                "content": post.content,
+                "likes_count": post.likes_count,
+                "comments_count": post.comments_count,
+                "created_at": post.created_at.isoformat(),
+                "updated_at": post.updated_at.isoformat(),
+                "images": [img.file_path for img in images]
+            })
+
+        return {"total": total, "page": page, "size": size, "items": items}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取用户帖子失败: {str(e)}")
+
+
+@router.get("/users/{user_id}/liked-posts")
+async def get_user_liked_posts(
+        user_id: int,
+        page: int = Query(1, ge=1),
+        size: int = Query(10, ge=1, le=50),
+        db: Session = Depends(get_db)
+):
+    """获取用户点赞过的帖子"""
+    try:
+        # 查询用户点赞的帖子ID
+        liked_post_ids = db.query(Like.target_id).filter(
+            Like.user_id == user_id,
+            Like.target_type == TargetType.POST
+        ).all()
+        liked_post_ids = [post_id[0] for post_id in liked_post_ids]
+
+        if not liked_post_ids:
+            return {"total": 0, "page": page, "size": size, "items": []}
+
+        # 查询这些帖子的详细信息
+        query = db.query(Post).filter(Post.id.in_(liked_post_ids))
+        total = query.count()
+
+        posts = query.order_by(Post.created_at.desc()) \
+            .offset((page - 1) * size) \
+            .limit(size) \
+            .all()
+
+        items = []
+        for post in posts:
+            images = db.query(CommunityImage.file_path) \
+                .filter(
+                CommunityImage.target_id == post.id,
+                CommunityImage.image_type == ImageType.POST
+            ) \
+                .all()
+
+            user = db.query(User.username).filter(User.id == post.user_id).first()
+
+            items.append({
+                "id": post.id,
+                "user_id": post.user_id,
+                "user_name": user.username if user else f"用户{post.user_id}",
+                "title": post.title,
+                "content": post.content,
+                "likes_count": post.likes_count,
+                "comments_count": post.comments_count,
+                "created_at": post.created_at.isoformat(),
+                "updated_at": post.updated_at.isoformat(),
+                "images": [img.file_path for img in images]
+            })
+
+        return {"total": total, "page": page, "size": size, "items": items}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取用户点赞帖子失败: {str(e)}")
