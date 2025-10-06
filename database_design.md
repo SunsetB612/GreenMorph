@@ -162,7 +162,7 @@ CREATE TABLE achievements (
     name VARCHAR(100) NOT NULL,
     description TEXT,
     icon_filename VARCHAR(255),
-    condition_type ENUM('project_count', 'post_count', 'likes_received') NOT NULL,
+    condition_type ENUM('project_count', 'post_count', 'likes_received','comment_count') NOT NULL,
     condition_value INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -26,9 +26,12 @@ import {
   EnvironmentOutlined,
   CalendarOutlined,
   LoginOutlined,
+  SyncOutlined
 } from '@ant-design/icons';
+
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
+import {checkAndNotifyAchievements} from "../utils/achievementNotifier";
 
 const { Title, Paragraph } = Typography;
 const Profile: React.FC = () => {
@@ -37,10 +40,42 @@ const Profile: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editForm] = Form.useForm();
-  const [achievements, setAchievements] = useState<any[]>([]);
-  const [achievementsLoading, setAchievementsLoading] = useState(false);
   const { user, isAuthenticated, checkAuth } = useAuthStore();
   const navigate = useNavigate();
+  const [userAchievements, setUserAchievements] = useState<Achievement[]>([]);
+  const [achievementsLoading, setAchievementsLoading] = useState(false);
+  const [achievementStats, setAchievementStats] = useState({
+    total: 0,
+    earned: 0,
+    progress: 0
+  });
+
+interface Achievement {
+  id: number;
+  name: string;
+  description: string;
+  icon: string | null;
+  condition_type: string;
+  condition_value: number;
+  status: 'achieved' | 'locked';
+  progress: number;
+  target: number;
+  progress_percentage: number;
+  earned_at: string | null;
+  is_completed: boolean;
+}
+
+interface UserAchievementResponse {
+  code: number;
+  message: string;
+  data: {
+    user_id: number;
+    username: string;
+    total_achievements: number;
+    earned_count: number;
+    achievements: Achievement[];
+  };
+}
 
   useEffect(() => {
     const loadUserInfo = async () => {
@@ -123,42 +158,7 @@ const Profile: React.FC = () => {
       tags: ['塑料瓶', '花瓶']
     }
   ];
-  // 获取成就列表的函数
-  const fetchAchievements = async () => {
-    setAchievementsLoading(true);
-    try {
-      const response = await fetch('http://localhost:8000/api/gamification/achievements');
-      const result = await response.json();
 
-      if (result.code === 200) {
-        setAchievements(result.data);
-      } else {
-        message.error('获取成就列表失败');
-      }
-    } catch (error) {
-      console.error('获取成就失败:', error);
-      message.error('获取成就列表失败');
-    } finally {
-      setAchievementsLoading(false);
-    }
-  };
-
-  // 在 useEffect 中调用
-  useEffect(() => {
-    const loadUserInfo = async () => {
-      if (isAuthenticated && user) {
-        setUserInfo(user);
-        // 获取成就数据
-        await fetchAchievements();
-        setLoading(false);
-      } else {
-        await checkAuth();
-        setLoading(false);
-      }
-    };
-
-    loadUserInfo();
-  }, [isAuthenticated, user, checkAuth]);
   // 成就图标映射
 const getAchievementIcon = (name: string) => {
   const iconMap: { [key: string]: string } = {
@@ -184,13 +184,77 @@ const getConditionText = (conditionType: string, conditionValue: number) => {
   };
   return conditionMap[conditionType] || `${conditionType}: ${conditionValue}`;
 };
-  // const achievements = [
-  //   { name: '环保新手', icon: '🌱', description: '发布第一个创意', earned: true },
-  //   { name: '改造达人', icon: '🔧', description: '发布10个改造作品', earned: true },
-  //   { name: '社区活跃', icon: '💬', description: '获得50个点赞', earned: true },
-  //   { name: '创意大师', icon: '🎨', description: '发布50个创意', earned: false },
-  //   { name: '环保专家', icon: '🏆', description: '获得1000积分', earned: false }
-  // ];
+
+ const fetchUserAchievements = async (userId: number) => {
+  setAchievementsLoading(true);
+  try {
+    // 先自动检查并发放成就
+    const checkResponse = await fetch(`http://localhost:8000/api/gamification/achievements/check/${userId}`, {
+      method: 'POST'
+    });
+    const checkResult = await checkResponse.json();
+
+    if (checkResult.code === 200 && checkResult.data.new_achievements.length > 0) {
+      message.success(`获得了 ${checkResult.data.new_achievements.length} 个新成就！`);
+    }
+
+    // 再获取最新的成就状态
+    const response = await fetch(`http://localhost:8000/api/gamification/achievements/user/${userId}`);
+    const result: UserAchievementResponse = await response.json();
+
+    if (result.code === 200) {
+      // 精细排序：未获得的在前，已获得的在后
+      const sortedAchievements = [...result.data.achievements].sort((a, b) => {
+        // 未获得的成就排在前面的
+        if (a.status !== 'achieved' && b.status === 'achieved') return -1;
+        if (a.status === 'achieved' && b.status !== 'achieved') return 1;
+
+        // 都是未获得的，按进度百分比倒序（进度高的在前）
+        if (a.status !== 'achieved' && b.status !== 'achieved') {
+          return b.progress_percentage - a.progress_percentage;
+        }
+
+        // 都是已获得的，按获得时间正序（最早获得的在前）
+        return new Date(a.earned_at!).getTime() - new Date(b.earned_at!).getTime();
+      });
+
+      setUserAchievements(sortedAchievements);
+      const earned = result.data.achievements.filter(a => a.status === 'achieved').length;
+      const total = result.data.achievements.length;
+      setAchievementStats({
+        total,
+        earned,
+        progress: total > 0 ? Math.round((earned / total) * 100) : 0
+      });
+    } else {
+      message.error('获取用户成就失败');
+    }
+  } catch (error) {
+    console.error('获取用户成就失败:', error);
+    message.error('获取用户成就失败');
+  } finally {
+    setAchievementsLoading(false);
+  }
+};
+useEffect(() => {
+  const loadUserInfo = async () => {
+    if (isAuthenticated && user) {
+      setUserInfo(user);
+      // 获取用户成就数据
+      await fetchUserAchievements(user.id);
+      await checkAndNotifyAchievements(user.id, () => {
+        // 成就获得后刷新成就列表
+        fetchUserAchievements(user.id);
+      });
+      setLoading(false);
+    } else {
+      await checkAuth();
+      setLoading(false);
+    }
+  };
+
+  loadUserInfo();
+}, [isAuthenticated, user, checkAuth]);
 
   // 如果正在加载
   if (loading) {
@@ -399,6 +463,38 @@ const getConditionText = (conditionType: string, conditionValue: number) => {
         </Col>
 
         <Col xs={24} lg={8}>
+          {/* 成就统计 */}
+  <Card title="成就统计" style={{ marginBottom: '24px' }}>
+    <div style={{ textAlign: 'center' }}>
+      <TrophyOutlined style={{ fontSize: '32px', color: 'var(--warning-color)', marginBottom: '8px' }} />
+      <Title level={4} style={{ marginBottom: '8px' }}>
+        已获得 {achievementStats.earned} / {achievementStats.total} 个成就
+      </Title>
+      <div style={{ marginBottom: '8px' }}>
+        <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+          成就完成度
+        </span>
+      </div>
+      <div style={{ marginBottom: '16px' }}>
+        <div style={{
+          background: 'var(--card-background)',
+          borderRadius: '10px',
+          height: '20px',
+          marginBottom: '8px'
+        }}>
+          <div style={{
+            background: 'linear-gradient(90deg, var(--success-color), var(--primary-color))',
+            borderRadius: '10px',
+            height: '100%',
+            width: `${achievementStats.progress}%`
+          }} />
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+          {achievementStats.progress}% 完成
+        </div>
+      </div>
+    </div>
+  </Card>
           {/* 等级和积分 */}
           <Card title="等级信息" style={{ marginBottom: '24px' }}>
             <div style={{ textAlign: 'center' }}>
@@ -433,65 +529,94 @@ const getConditionText = (conditionType: string, conditionValue: number) => {
             </div>
           </Card>
 
-          {/* 成就系统 */}
-<Card title="成就徽章" loading={achievementsLoading}>
-  <div
-    style={{
+          {/* 成就徽章 */}
+  <Card title="成就徽章" loading={achievementsLoading}>
+    <div style={{
       maxHeight: '400px',
       overflowY: 'auto',
       display: 'flex',
       flexDirection: 'column',
       gap: '16px',
       paddingRight: '8px',
-    }}
-  >
-    {achievements.map((achievement) => (
-      <div key={achievement.id} style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: '12px',
-        border: '1px solid var(--border-color)',
-        borderRadius: '8px',
-        backgroundColor: 'var(--card-background)',
-        flexShrink: 0,
-      }}>
-        <span style={{ fontSize: '24px', marginRight: '12px' }}>
-          {getAchievementIcon(achievement.name)}
-        </span>
-        <div style={{ flex: 1 }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '4px'
-          }}>
-            <span style={{ fontWeight: 500, fontSize: '16px' }}>
-              {achievement.name}
-            </span>
-            <Tag color="default">
-              未获得
-            </Tag>
-          </div>
-          <div style={{
-            color: 'var(--text-secondary)',
-            fontSize: '14px',
-            lineHeight: '1.4'
-          }}>
-            {achievement.description}
-          </div>
-          <div style={{
-            marginTop: '4px',
-            fontSize: '12px',
-            color: 'var(--text-secondary)'
-          }}>
-            条件: {getConditionText(achievement.condition_type, achievement.condition_value)}
+    }}>
+      {userAchievements.map((achievement) => (
+        <div key={achievement.id} style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '12px',
+          border: '1px solid var(--border-color)',
+          borderRadius: '8px',
+          backgroundColor: 'var(--card-background)',
+          flexShrink: 0,
+        }}>
+          <span style={{ fontSize: '24px', marginRight: '12px' }}>
+            {getAchievementIcon(achievement.name)}
+          </span>
+          <div style={{ flex: 1 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '4px'
+            }}>
+              <span style={{ fontWeight: 500, fontSize: '16px' }}>
+                {achievement.name}
+              </span>
+              <Tag color={achievement.status === 'achieved' ? 'green' : 'default'}>
+                {achievement.status === 'achieved' ? '已获得' : '未获得'}
+              </Tag>
+            </div>
+            <div style={{
+              color: 'var(--text-secondary)',
+              fontSize: '14px',
+              lineHeight: '1.4'
+            }}>
+              {achievement.description}
+            </div>
+            {/* 进度条显示 */}
+            <div style={{ marginTop: '8px' }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '12px',
+                marginBottom: '4px',
+                color: 'var(--text-secondary)'
+              }}>
+                <span>进度: {achievement.progress} / {achievement.target}</span>
+                <span>{achievement.progress_percentage}%</span>
+              </div>
+              <div style={{
+                background: 'var(--card-background)',
+                borderRadius: '10px',
+                height: '6px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  background: achievement.status === 'achieved' ?
+                    'var(--success-color)' : 'var(--primary-color)',
+                  borderRadius: '10px',
+                  height: '100%',
+                  width: `${achievement.progress_percentage}%`,
+                  transition: 'width 0.3s ease'
+                }} />
+              </div>
+            </div>
+            {/* 获得时间 */}
+            {achievement.earned_at && (
+              <div style={{
+                marginTop: '4px',
+                fontSize: '12px',
+                color: 'var(--success-color)'
+              }}>
+                获得时间: {new Date(achievement.earned_at).toLocaleDateString()}
+              </div>
+            )}
           </div>
         </div>
-      </div>
-    ))}
-  </div>
-</Card>
-        </Col>
+      ))}
+    </div>
+  </Card>
+</Col>
       </Row>
 
       {/* 编辑资料模态框 */}

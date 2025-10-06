@@ -17,6 +17,7 @@ import {
   SearchOutlined
 } from '@ant-design/icons';
 import { useAuthStore } from '../store/authStore';
+import { checkAndNotifyAchievements } from '../utils/achievementNotifier';
 const { Title, Paragraph } = Typography;
 const { TabPane } = Tabs;
 const API_BASE_URL = 'http://localhost:8000';
@@ -211,6 +212,7 @@ const handleCreatePost = async (values: CreatePostFormValues) => {
 
     // 3. 操作完成，提示并刷新
     message.success('发布成功！');
+    await checkAndNotifyAchievements(user.id);
     setCreateModalVisible(false);
     form.resetFields();
     setPage(1);
@@ -662,7 +664,7 @@ const handleSubmitComment = async () => {
     // 刷新评论列表和帖子列表的评论数
     await fetchComments(currentPostId);
     fetchPosts();
-
+    await checkAndNotifyAchievements(user.id);
     // 清空输入
     setCommentContent('');
     setCommentImages([]);
@@ -757,7 +759,9 @@ const handleLike = async (postId: number) => {
           : post
       )
     );
-
+    if (currentPost && !isLiked && currentPost.user_id === user.id) {
+      await checkAndNotifyAchievements(currentPost.user_id);
+    }
     message.success(result.message);
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHORIZED') {
