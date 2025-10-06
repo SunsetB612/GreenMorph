@@ -10,96 +10,126 @@ from app.core.user.models import User
 from app.core.community.models import Post, Comment, Like
 from loguru import logger
 from datetime import datetime
-from sqlalchemy import desc
 router = APIRouter()
-router = APIRouter()
+def calculate_user_progress(user_id: int, db: Session) -> dict:
+    """计算用户在各条件下的进度"""
+    from sqlalchemy import and_
 
+    progress = {}
+
+    try:
+        # 用户发帖数
+        progress["post_count"] = db.query(Post).filter(Post.user_id == user_id).count()
+
+        # 用户评论数
+        progress["comment_count"] = db.query(Comment).filter(Comment.user_id == user_id).count()
+
+        # 用户收到的点赞数（基于帖子）
+        user_post_ids = [
+            post.id for post in db.query(Post.id).filter(Post.user_id == user_id).all()
+        ]
+        if user_post_ids:
+            progress["likes_received"] = db.query(Like).filter(
+                and_(
+                    Like.target_type == "post",
+                    Like.target_id.in_(user_post_ids)
+                )
+            ).count()
+        else:
+            progress["likes_received"] = 0
+
+        # 用户发起的改造项目数
+        progress["project_count"] = db.query(RedesignProject).filter(
+            RedesignProject.user_id == user_id
+        ).count()
+
+        logger.info(f"用户 {user_id} 进度统计: {progress}")
+
+    except Exception as e:
+        logger.error(f"计算用户进度失败: {e}")
+        # 保证返回结构完整
+        progress.update({
+            "post_count": progress.get("post_count", 0),
+            "comment_count": progress.get("comment_count", 0),
+            "likes_received": progress.get("likes_received", 0),
+            "project_count": progress.get("project_count", 0),
+        })
+
+    return progress
 
 @router.get("/achievements")
 async def get_achievements(db: Session = Depends(get_db)):
     """获取所有成就列表"""
     try:
-        # 从数据库获取所有成就
         achievements = db.query(Achievement).all()
 
-        # 转换为前端需要的格式
-        achievements_list = []
-        for achievement in achievements:
-            achievements_list.append({
-                "id": achievement.id,
-                "name": achievement.name,
-                "description": achievement.description,
-                "condition_type": achievement.condition_type,
-                "condition_value": achievement.condition_value,
-                "created_at": achievement.created_at.isoformat() if achievement.created_at else None
-            })
+        achievements_list = [
+            {
+                "id": a.id,
+                "name": a.name,
+                "description": a.description,
+                "condition_type": a.condition_type,
+                "condition_value": a.condition_value,
+                "created_at": a.created_at.isoformat() if a.created_at else None
+            }
+            for a in achievements
+        ]
 
         return {
             "code": 200,
             "message": "获取成就列表成功",
             "data": achievements_list
         }
-
     except Exception as e:
         return {
             "code": 500,
-            "message": f"获取成就列表失败: {str(e)}",
+            "message": f"获取成就列表失败: {e}",
             "data": []
         }
-
 
 @router.get("/achievements/user/{user_id}")
 async def get_user_achievements(user_id: int, db: Session = Depends(get_db)):
     """获取用户的成就进度"""
     try:
-        # 1. 验证用户是否存在
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
-            return {
-                "code": 404,
-                "message": "用户不存在",
-                "data": []
-            }
+            return {"code": 404, "message": "用户不存在", "data": []}
 
-        # 2. 获取所有成就定义
         all_achievements = db.query(Achievement).all()
-
-        # 3. 获取用户已获得的成就
-        earned_achievements = db.query(UserAchievement).filter(
+        earned = db.query(UserAchievement).filter(
             UserAchievement.user_id == user_id
         ).all()
-        earned_achievement_ids = {ua.achievement_id for ua in earned_achievements}
-        earned_achievement_map = {ua.achievement_id: ua.earned_at for ua in earned_achievements}
 
-        # 4. 计算用户在各条件下的进度
+        earned_ids = {ua.achievement_id for ua in earned}
+        earned_map = {ua.achievement_id: ua.earned_at for ua in earned}
         user_progress = calculate_user_progress(user_id, db)
 
-        # 5. 构建响应数据
-        user_achievements = []
-        for achievement in all_achievements:
-            current_progress = user_progress.get(achievement.condition_type, 0)
-            is_earned = achievement.id in earned_achievement_ids
-
-            # 计算进度百分比
-            progress_percentage = 0
-            if achievement.condition_value > 0:
-                progress_percentage = min(100, int((current_progress / achievement.condition_value) * 100))
-
-            user_achievements.append({
-                "id": achievement.id,
-                "name": achievement.name,
-                "description": achievement.description,
-                "icon": achievement.icon_filename,
-                "condition_type": achievement.condition_type,
-                "condition_value": achievement.condition_value,
+        def build_item(a: Achievement):
+            current = user_progress.get(a.condition_type, 0)
+            is_earned = a.id in earned_ids
+            percentage = (
+                min(100, int(current / a.condition_value * 100))
+                if a.condition_value > 0 else 0
+            )
+            return {
+                "id": a.id,
+                "name": a.name,
+                "description": a.description,
+                "icon": a.icon_filename,
+                "condition_type": a.condition_type,
+                "condition_value": a.condition_value,
                 "status": "achieved" if is_earned else "locked",
-                "progress": current_progress,
-                "target": achievement.condition_value,
-                "progress_percentage": progress_percentage,
-                "earned_at": earned_achievement_map.get(achievement.id).isoformat()
-                if is_earned and earned_achievement_map.get(achievement.id) else None,
-                "is_completed": current_progress >= achievement.condition_value
-            })
+                "progress": current,
+                "target": a.condition_value,
+                "progress_percentage": percentage,
+                "earned_at": (
+                    earned_map[a.id].isoformat()
+                    if is_earned and earned_map.get(a.id) else None
+                ),
+                "is_completed": current >= a.condition_value,
+            }
+
+        achievements = [build_item(a) for a in all_achievements]
 
         return {
             "code": 200,
@@ -108,110 +138,42 @@ async def get_user_achievements(user_id: int, db: Session = Depends(get_db)):
                 "user_id": user_id,
                 "username": user.username,
                 "total_achievements": len(all_achievements),
-                "earned_count": len(earned_achievement_ids),
-                "achievements": user_achievements
-            }
+                "earned_count": len(earned_ids),
+                "achievements": achievements,
+            },
         }
-
     except Exception as e:
-        logger.error(f"获取用户成就失败: {str(e)}")
-        return {
-            "code": 500,
-            "message": f"获取用户成就失败: {str(e)}",
-            "data": []
-        }
-
-
-def calculate_user_progress(user_id: int, db: Session) -> dict:
-    """计算用户在各条件下的进度"""
-    from sqlalchemy import and_
-
-    progress = {}
-
-    try:
-        # 计算帖子数量
-        post_count = db.query(Post).filter(Post.user_id == user_id).count()
-        progress['post_count'] = post_count
-
-        # 计算评论数量
-        comment_count = db.query(Comment).filter(Comment.user_id == user_id).count()
-        progress['comment_count'] = comment_count
-
-        # 计算获得的点赞数 - 使用子查询避免复杂关联
-        # 先获取用户的所有帖子ID
-        user_post_ids = [post.id for post in db.query(Post.id).filter(Post.user_id == user_id).all()]
-
-        if user_post_ids:
-            post_likes = db.query(Like).filter(
-                and_(
-                    Like.target_type == 'post',
-                    Like.target_id.in_(user_post_ids)
-                )
-            ).count()
-        else:
-            post_likes = 0
-
-        progress['likes_received'] = post_likes
-
-        # 计算项目数量
-        project_count = db.query(RedesignProject).filter(
-            RedesignProject.user_id == user_id
-        ).count()
-        progress['project_count'] = project_count
-
-        logger.info(f"用户 {user_id} 进度统计: {progress}")
-
-    except Exception as e:
-        logger.error(f"计算用户进度失败: {e}")
-        progress.setdefault('post_count', 0)
-        progress.setdefault('comment_count', 0)
-        progress.setdefault('likes_received', 0)
-        progress.setdefault('project_count', 0)
-
-    return progress
-
+        logger.error(f"获取用户成就失败: {e}")
+        return {"code": 500, "message": f"获取用户成就失败: {e}", "data": []}
 
 @router.post("/achievements/check/{user_id}")
 async def check_achievements(user_id: int, db: Session = Depends(get_db)):
     """检查并发放成就"""
     try:
-        # 1. 验证用户是否存在
+        # 验证用户是否存在
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
-            return {
-                "code": 404,
-                "message": "用户不存在",
-                "data": []
-            }
+            return {"code": 404, "message": "用户不存在", "data": []}
 
-        # 2. 计算用户当前进度
+        # 计算用户进度
         user_progress = calculate_user_progress(user_id, db)
 
-        # 3. 获取所有成就定义
+        # 获取所有成就定义
         all_achievements = db.query(Achievement).all()
 
-        # 4. 获取用户已获得的成就
-        earned_achievements = db.query(UserAchievement).filter(
+        # 获取用户已获得的成就
+        earned = db.query(UserAchievement).filter(
             UserAchievement.user_id == user_id
         ).all()
-        earned_achievement_ids = {ua.achievement_id for ua in earned_achievements}
+        earned_ids = {ua.achievement_id for ua in earned}
 
-        # 5. 检查并发放新成就
+        # 检查并发放新成就
         new_achievements = []
-
         for achievement in all_achievements:
-            # 如果用户还没有获得这个成就
-            if achievement.id not in earned_achievement_ids:
+            if achievement.id not in earned_ids:
                 current_progress = user_progress.get(achievement.condition_type, 0)
-
-                # 检查是否满足成就条件
                 if current_progress >= achievement.condition_value:
-                    # 发放成就
-                    user_achievement = UserAchievement(
-                        user_id=user_id,
-                        achievement_id=achievement.id
-                    )
-                    db.add(user_achievement)
+                    db.add(UserAchievement(user_id=user_id, achievement_id=achievement.id))
                     new_achievements.append({
                         "id": achievement.id,
                         "name": achievement.name,
@@ -219,84 +181,76 @@ async def check_achievements(user_id: int, db: Session = Depends(get_db)):
                         "icon": achievement.icon_filename,
                         "condition_type": achievement.condition_type,
                         "condition_value": achievement.condition_value,
-                        "current_progress": current_progress
+                        "current_progress": current_progress,
                     })
 
-        # 6. 提交事务
         if new_achievements:
             db.commit()
-            logger.info(f"用户 {user_id}({user.username}) 获得了 {len(new_achievements)} 个新成就")
+            logger.info(f"用户 {user_id}({user.username}) 新增成就 {len(new_achievements)} 个")
 
-        # 7. 返回结果
         return {
             "code": 200,
-            "message": f"成就检查完成，获得了 {len(new_achievements)} 个新成就" if new_achievements else "没有新成就",
+            "message": (
+                f"成就检查完成，获得 {len(new_achievements)} 个新成就"
+                if new_achievements else "没有新成就"
+            ),
             "data": {
                 "user_id": user_id,
                 "username": user.username,
                 "new_achievements": new_achievements,
-                "total_earned": len(earned_achievements) + len(new_achievements),
-                "user_progress": user_progress
-            }
+                "total_earned": len(earned) + len(new_achievements),
+                "user_progress": user_progress,
+            },
         }
 
     except Exception as e:
         db.rollback()
-        logger.error(f"检查成就失败: {str(e)}")
-        return {
-            "code": 500,
-            "message": f"检查成就失败: {str(e)}",
-            "data": []
-        }
-
+        logger.error(f"检查成就失败: {e}")
+        return {"code": 500, "message": f"检查成就失败: {e}", "data": []}
 
 @router.get("/leaderboard")
 async def get_leaderboard(
-        db: Session = Depends(get_db),
-        limit: int = 50
+    db: Session = Depends(get_db),
+    limit: int = 50
 ):
     """获取积分排行榜"""
     try:
-        # 直接按 users.points 字段排序
-        leaderboard_data = db.query(
-            User.id,
-            User.username,
-            User.points,
-            User.skill_level
-        ).filter(
-            User.is_active == True
-        ).order_by(
-            User.points.desc()
-        ).limit(limit).all()
+        # 查询活跃用户并按积分排序
+        leaderboard_data = (
+            db.query(User.id, User.username, User.points, User.skill_level)
+            .filter(User.is_active == True)
+            .order_by(User.points.desc())
+            .limit(limit)
+            .all()
+        )
 
-        # 构建响应数据
         leaderboard = []
         current_rank = 1
         previous_points = None
         skip_rank = 0
 
-        for i, (user_id, username, points, skill_level) in enumerate(leaderboard_data):
-            # 处理并列排名
+        for _, (user_id, username, points, _) in enumerate(leaderboard_data):
+            # 并列排名处理
             if previous_points is not None and points == previous_points:
                 skip_rank += 1
             else:
                 current_rank += skip_rank
                 skip_rank = 0
 
-            # 实时计算等级（不依赖数据库中的skill_level）
+            # 实时计算等级（覆盖数据库中的 skill_level）
             if points >= 200:
-                current_level = "advanced"
+                level = "advanced"
             elif points >= 100:
-                current_level = "intermediate"
+                level = "intermediate"
             else:
-                current_level = "beginner"
+                level = "beginner"
 
             leaderboard.append({
                 "rank": current_rank,
                 "user_id": user_id,
                 "username": username,
                 "points": points or 0,
-                "skill_level": current_level  # 使用实时计算的等级
+                "skill_level": level,
             })
 
             previous_points = points
@@ -309,51 +263,51 @@ async def get_leaderboard(
                 "leaderboard": leaderboard,
                 "total_users": len(leaderboard),
                 "type": "points",
-                "updated_at": datetime.now().isoformat()
-            }
+                "updated_at": datetime.now().isoformat(),
+            },
         }
 
     except Exception as e:
-        logger.error(f"获取积分排行榜失败: {str(e)}")
-        return {
-            "code": 500,
-            "message": f"获取积分排行榜失败: {str(e)}",
-            "data": []
-        }
-
+        logger.error(f"获取积分排行榜失败: {e}")
+        return {"code": 500, "message": f"获取积分排行榜失败: {e}", "data": []}
 
 @router.get("/leaderboard/user/{user_id}")
-async def get_user_ranking(user_id: int, db: Session = Depends(get_db)):
+async def get_user_ranking(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
     """获取指定用户在积分排行榜中的排名"""
     try:
-        # 获取用户信息
+        # 查询用户信息
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
-            return {
-                "code": 404,
-                "message": "用户不存在",
-                "data": None
-            }
+            return {"code": 404, "message": "用户不存在", "data": None}
 
-        # 计算用户在积分排行榜中的排名
-        users_with_more_points = db.query(User).filter(
-            User.points > user.points,
-            User.is_active == True
-        ).count()
+        # 计算排名（比当前用户积分高的人数 + 1）
+        higher_score_count = (
+            db.query(User)
+            .filter(User.points > user.points, User.is_active == True)
+            .count()
+        )
+        rank = higher_score_count + 1
 
-        user_rank = users_with_more_points + 1
-
-        # 总活跃用户数
-        total_active_users = db.query(User).filter(User.is_active == True).count()
+        # 统计总活跃用户数
+        total_users = db.query(User).filter(User.is_active == True).count()
 
         # 实时计算等级
         points = user.points or 0
         if points >= 200:
-            current_level = "advanced"
+            level = "advanced"
         elif points >= 100:
-            current_level = "intermediate"
+            level = "intermediate"
         else:
-            current_level = "beginner"
+            level = "beginner"
+
+        # 计算百分位
+        percentile = (
+            round((total_users - rank) / total_users * 100, 1)
+            if total_users > 0 else 0
+        )
 
         return {
             "code": 200,
@@ -362,18 +316,13 @@ async def get_user_ranking(user_id: int, db: Session = Depends(get_db)):
                 "user_id": user_id,
                 "username": user.username,
                 "points": points,
-                "skill_level": current_level,  # 使用实时计算的等级
-                "rank": user_rank,
-                "total_users": total_active_users,
-                "percentile": round((total_active_users - user_rank) / total_active_users * 100,
-                                    1) if total_active_users > 0 else 0
-            }
+                "skill_level": level,
+                "rank": rank,
+                "total_users": total_users,
+                "percentile": percentile,
+            },
         }
 
     except Exception as e:
-        logger.error(f"获取用户排名失败: {str(e)}")
-        return {
-            "code": 500,
-            "message": f"获取用户排名失败: {str(e)}",
-            "data": None
-        }
+        logger.error(f"获取用户排名失败: {e}")
+        return {"code": 500, "message": f"获取用户排名失败: {e}", "data": None}
