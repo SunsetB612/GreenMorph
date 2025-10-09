@@ -29,7 +29,8 @@ import {
   CheckCircleOutlined
 } from '@ant-design/icons';
 import type { UploadFile, UploadProps } from 'antd';
-
+import { checkAndNotifyAchievements } from '../utils/achievementNotifier';
+import { useAuthStore } from '../store/authStore';
 const { Title, Paragraph, Text } = Typography;
 
 // 改造方案类型定义
@@ -174,6 +175,11 @@ const AIAssistant: React.FC = () => {
       
       setRedesignPlan(mappedResult);
       message.success('改造方案生成完成！');
+
+      const { user } = useAuthStore.getState();
+    if (user?.id) {
+      await checkAndNotifyAchievements(user.id);
+    }
       
     } catch (error) {
       console.error('改造方案生成失败:', error);

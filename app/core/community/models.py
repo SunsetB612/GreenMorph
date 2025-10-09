@@ -6,7 +6,7 @@ from sqlalchemy import Column, BigInteger, String, Text, ForeignKey, Integer, JS
 from sqlalchemy.sql import func
 from app.database import Base
 import enum
-
+from sqlalchemy.orm import relationship
 
 class TargetType(str, enum.Enum):
     POST = "post"
@@ -44,6 +44,6 @@ class Like(Base):
     
     id = Column(BigInteger, primary_key=True, index=True)
     user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
-    target_type = Column(Enum(TargetType), nullable=False)
+    target_type = Column(Enum("post","comment",name="targettype"), nullable=False)
     target_id = Column(BigInteger, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

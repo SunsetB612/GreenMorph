@@ -134,7 +134,8 @@ CREATE TABLE community_images (
     image_type ENUM('post', 'comment') NOT NULL,
     target_id BIGINT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
+
+
     FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_target (image_type, target_id),
     INDEX idx_uploader (uploader_id)
@@ -161,7 +162,7 @@ CREATE TABLE achievements (
     name VARCHAR(100) NOT NULL,
     description TEXT,
     icon_filename VARCHAR(255),
-    condition_type ENUM('project_count', 'post_count', 'likes_received') NOT NULL,
+    condition_type ENUM('project_count', 'post_count', 'likes_received','comment_count') NOT NULL,
     condition_value INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
