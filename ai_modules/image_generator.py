@@ -11,7 +11,6 @@ from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image
 import cv2
 import numpy as np
-import torch
 # from diffusers import StableDiffusionControlNetPipeline, ControlNetModel
 # from diffusers import DDIMScheduler
 # from controlnet_aux import CannyDetector, OpenposeDetector
@@ -24,7 +23,6 @@ class ImageGenerator:
     """图像生成器"""
     
     def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.pipeline = None
         self.controlnet = None
         self.canny_detector = None
@@ -727,22 +725,16 @@ class ImageGenerator:
     def validate_generation_requirements(self) -> bool:
         """验证图像生成环境要求"""
         try:
-            # 如果使用通义千问API，直接返回True
-            if self.use_tongyi:
+            # 使用云端API，直接返回True
+            if self.use_tongyi or self.use_doubao:
                 return True
             
-            # 检查CUDA可用性
-            if self.device == "cuda":
-                if not torch.cuda.is_available():
-                    logger.warning("CUDA不可用，将使用CPU")
-                    return False
+            # 检查备用方案
+            if self.use_fallback:
+                return True
             
-            # 检查模型是否加载
-            if not self.pipeline:
-                logger.warning("图像生成模型未加载")
-                return False
-            
-            return True
+            logger.warning("没有可用的图像生成方案")
+            return False
             
         except Exception as e:
             logger.error(f"环境验证失败: {str(e)}")

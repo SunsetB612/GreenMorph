@@ -93,13 +93,20 @@ def create_tables():
         );
 
         -- 2. 用户输入图片表
-        CREATE TABLE IF NOT EXISTS input_images (
+        -- 先删除依赖的表
+        DROP TABLE IF EXISTS redesign_steps;
+        DROP TABLE IF EXISTS project_details;
+        DROP TABLE IF EXISTS redesign_projects;
+        DROP TABLE IF EXISTS input_images;
+        CREATE TABLE input_images (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
             user_id BIGINT NOT NULL,
             original_filename VARCHAR(255),
             input_image_path VARCHAR(500) NOT NULL,
             input_image_size INT,
             mime_type VARCHAR(100),
+            cloud_url VARCHAR(500),
+            analysis_result TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
