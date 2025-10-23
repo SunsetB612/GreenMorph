@@ -17,8 +17,7 @@ python init_mysql_db.py
 ### 2. 后端启动
 ```bash
 # 配置环境变量
-cp .env.example .env
-# 编辑 .env 文件，填入API密钥和MySQL配置
+cp env_template.txt .env
 
 # 启动后端服务
 python run.py

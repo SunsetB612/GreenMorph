@@ -88,15 +88,8 @@ def check_environment():
     else:
         logger.info(f"检测到API密钥: {', '.join(api_keys_available)}")
     
-    # 检查CUDA可用性
-    try:
-        import torch
-        if torch.cuda.is_available():
-            logger.info(f"CUDA可用，GPU设备: {torch.cuda.get_device_name()}")
-        else:
-            logger.info("CUDA不可用，将使用CPU")
-    except ImportError:
-        logger.warning("PyTorch未安装，图像生成功能可能不可用")
+    # 检查图像生成API可用性
+    logger.info("使用云端API进行图像生成，无需本地GPU")
     
     logger.info("环境检查完成")
     return True
