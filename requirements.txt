@@ -21,6 +21,9 @@ numpy>=1.24.0
 # 多模态模型支持
 dashscope>=1.14.0
 volcengine-python-sdk[ark]>=1.0.0  # 字节跳动豆包AI SDK
+openai>=1.0.0
+anthropic>=0.3.0
+replicate>=0.15.0
 
 # 工具库
 requests>=2.31.0
@@ -32,3 +35,7 @@ python-dotenv>=1.0.0
 pydantic[email]>=2.0.0
 pydantic-settings>=2.0.0
 loguru>=0.7.0
+
+# 开发工具
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
