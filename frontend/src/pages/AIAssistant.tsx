@@ -33,6 +33,8 @@ import { checkAndNotifyAchievements } from '../utils/achievementNotifier';
 import { useAuthStore } from '../store/authStore';
 const { Title, Paragraph, Text } = Typography;
 
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
 // 改造方案类型定义
 interface RedesignStep {
   title: string;
@@ -95,7 +97,7 @@ const AIAssistant: React.FC = () => {
       
       // 调用后端图片分析API
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('http://localhost:8000/api/redesign/analyze/image', {
+      const response = await fetch(`${API_BASE_URL}/redesign/analyze/image`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -144,7 +146,7 @@ const AIAssistant: React.FC = () => {
       
       // 调用后端改造方案生成API
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('http://localhost:8000/api/redesign/generate', {
+      const response = await fetch(`${API_BASE_URL}/redesign/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -169,8 +171,8 @@ const AIAssistant: React.FC = () => {
         total_cost: result.total_cost_estimate || '待评估',
         sustainability_score: result.sustainability_score || 7,
         tips: result.tips || [],
-        final_image: result.final_image_url ? `http://localhost:8000${result.final_image_url}` : undefined,
-        step_images: result.step_images ? result.step_images.map((url: string) => `http://localhost:8000${url}`) : []
+        final_image: result.final_image_url ? `${API_BASE_URL.replace('/api', '')}${result.final_image_url}` : undefined,
+step_images: result.step_images ? result.step_images.map((url: string) => `${API_BASE_URL.replace('/api', '')}${url}`) : []
       };
       
       setRedesignPlan(mappedResult);

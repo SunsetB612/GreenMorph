@@ -5,8 +5,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 // API基础URL
-const API_BASE_URL = 'http://localhost:8000/api';
-
+// const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 // 类型定义
 interface User {
   id: number;
