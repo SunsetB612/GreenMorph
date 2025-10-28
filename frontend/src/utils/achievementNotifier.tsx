@@ -1,6 +1,6 @@
 // utils/achievementNotifier.tsx
 import { notification, Modal } from 'antd';
-
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 // 定义成就类型
 interface Achievement {
   id: number;
@@ -38,7 +38,7 @@ const getAchievementIcon = (name: string): string => {
 // 检查并通知成就
 export const checkAndNotifyAchievements = async (userId: number, onAchievementsUpdated?: () => void): Promise<void> => {
   try {
-    const response = await fetch(`http://localhost:8000/api/gamification/achievements/check/${userId}`, {
+    const response = await fetch(`${API_BASE_URL}/gamification/achievements/check/${userId}`, {
       method: 'POST',
     });
 

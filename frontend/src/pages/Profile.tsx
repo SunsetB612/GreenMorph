@@ -33,6 +33,8 @@ import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import {checkAndNotifyAchievements} from "../utils/achievementNotifier";
 
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
 const { Title, Paragraph } = Typography;
 interface Achievement {
   id: number;
@@ -168,7 +170,7 @@ const Profile: React.FC = () => {
         return;
       }
       
-      const response = await fetch('http://localhost:8000/api/auth/me', {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -214,7 +216,7 @@ const getAchievementIcon = (name: string) => {
   setAchievementsLoading(true);
   try {
     // 先自动检查并发放成就
-    const checkResponse = await fetch(`http://localhost:8000/api/gamification/achievements/check/${userId}`, {
+    const checkResponse = await fetch(`${API_BASE_URL}/gamification/achievements/check/${userId}`, {
       method: 'POST'
     });
     const checkResult = await checkResponse.json();
@@ -224,7 +226,7 @@ const getAchievementIcon = (name: string) => {
     }
 
     // 再获取最新的成就状态
-    const response = await fetch(`http://localhost:8000/api/gamification/achievements/user/${userId}`);
+    const response = await fetch(`${API_BASE_URL}/gamification/achievements/user/${userId}`);
     const result: UserAchievementResponse = await response.json();
 
     if (result.code === 200) {
@@ -266,7 +268,7 @@ const getAchievementIcon = (name: string) => {
 const fetchLeaderboard = async (limit: number = 10): Promise<void> => {
   setLeaderboardLoading(true);
   try {
-    const response = await fetch(`http://localhost:8000/api/gamification/leaderboard?limit=${limit}`);
+    const response = await fetch(`${API_BASE_URL}/gamification/leaderboard?limit=${limit}`);
     const result: LeaderboardResponse = await response.json();
 
     if (result.code === 200) {
@@ -287,7 +289,7 @@ const fetchUserRanking = async (userId: number): Promise<void> => {
   setRankingLoading(true);
   try {
     // 先获取排行榜数据来计算准确排名
-    const response = await fetch(`http://localhost:8000/api/gamification/leaderboard?limit=100`);
+    const response = await fetch(`${API_BASE_URL}/gamification/leaderboard?limit=100`);
     const result: LeaderboardResponse = await response.json();
 
     if (result.code === 200) {
@@ -311,7 +313,7 @@ const fetchUserRanking = async (userId: number): Promise<void> => {
         });
       } else {
         // 用户不在前100名，需要单独查询
-        const userResponse = await fetch(`http://localhost:8000/api/gamification/leaderboard/user/${userId}`);
+        const userResponse = await fetch(`${API_BASE_URL}/gamification/leaderboard/user/${userId}`);
         const userResult: UserRankingResponse = await userResponse.json();
 
         if (userResult.code === 200) {
@@ -397,7 +399,7 @@ const calculatePointsProgress = (points: number) => {
 const fetchUserStats = async (userId: number): Promise<void> => {
   setStatsLoading(true);
   try {
-    const response = await fetch(`http://localhost:8000/api/community/users/${userId}/stats`);
+    const response = await fetch(`${API_BASE_URL}/community/users/${userId}/stats`);
     const result: UserStatsResponse = await response.json();
 
     if (result.code === 200) {
@@ -416,7 +418,7 @@ const fetchUserStats = async (userId: number): Promise<void> => {
 const fetchUserPosts = async (userId: number): Promise<void> => {
   setPostsLoading(true);
   try {
-    const response = await fetch(`http://localhost:8000/api/community/users/${userId}/posts`);
+    const response = await fetch(`${API_BASE_URL}/community/users/${userId}/posts`);
     const result: PostsResponse = await response.json();
 
     if (result.items) {
@@ -439,7 +441,7 @@ const fetchUserPosts = async (userId: number): Promise<void> => {
 const fetchLikedPosts = async (userId: number): Promise<void> => {
   setLikedPostsLoading(true);
   try {
-    const response = await fetch(`http://localhost:8000/api/community/users/${userId}/liked-posts`);
+    const response = await fetch(`${API_BASE_URL}/community/users/${userId}/liked-posts`);
     const result: PostsResponse = await response.json();
 
     if (result.items) {
@@ -648,7 +650,7 @@ const fetchLikedPosts = async (userId: number): Promise<void> => {
                                             {post.images.slice(0, 3).map((image, index) => (
                                                 <img
                                                     key={index}
-                                                    src={image.startsWith('http') ? image : `http://localhost:8000/${image}`}
+                                                    src={image.startsWith('http') ? image : `${API_BASE_URL.replace('/api', '')}/${image}`}
                                                     alt={`帖子图片 ${index + 1}`}
                                                     style={{
                                                       width: '80px',
@@ -761,7 +763,7 @@ const fetchLikedPosts = async (userId: number): Promise<void> => {
                                             {post.images.slice(0, 3).map((image, index) => (
                                                 <img
                                                     key={index}
-                                                    src={image.startsWith('http') ? image : `http://localhost:8000/${image}`}
+                                                    src={image.startsWith('http') ? image : `${API_BASE_URL.replace('/api', '')}/${image}`}
                                                     alt={`帖子图片 ${index + 1}`}
                                                     style={{
                                                       width: '80px',

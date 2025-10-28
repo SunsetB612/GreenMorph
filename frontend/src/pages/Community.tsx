@@ -20,7 +20,8 @@ import { useAuthStore } from '../store/authStore';
 import { checkAndNotifyAchievements } from '../utils/achievementNotifier';
 const { Title, Paragraph } = Typography;
 const { TabPane } = Tabs;
-const API_BASE_URL = 'http://localhost:8000';
+// const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 const { TextArea } = Input;
 const { confirm } = Modal;
 
@@ -100,7 +101,7 @@ const Community: React.FC = () => {
   setLoading(true);
 
   try {
-    const url = `${API_BASE_URL}/api/community/posts?category=${category}&page=${page}&size=${size}`;
+    const url = `${API_BASE_URL}/community/posts?category=${category}&page=${page}&size=${size}`;
     const res = await fetch(url);
     const data = await res.json();
 
@@ -110,14 +111,14 @@ const Community: React.FC = () => {
         try {
           // 获取评论总数（只取第一页一条即可获取 total）
           const commentRes = await fetch(
-            `${API_BASE_URL}/api/community/posts/${post.id}/comments?page=1&size=1`
+            `${API_BASE_URL}/community/posts/${post.id}/comments?page=1&size=1`
           );
           const commentData = await commentRes.json();
 
           // 获取点赞状态
           const token = localStorage.getItem('auth_token');
           const likeStatusRes = await fetch(
-            `${API_BASE_URL}/api/community/posts/${post.id}/like/status`,
+            `${API_BASE_URL}/community/posts/${post.id}/like/status`,
             {
               headers: token ? { 'Authorization': `Bearer ${token}` } : {}
             }
@@ -163,7 +164,7 @@ const handleCreatePost = async (values: CreatePostFormValues) => {
     const token = localStorage.getItem('auth_token');
 
     // 1. 创建帖子
-    const postResponse = await fetch(`${API_BASE_URL}/api/community/posts`, {
+    const postResponse = await fetch(`${API_BASE_URL}/community/posts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -192,7 +193,7 @@ const handleCreatePost = async (values: CreatePostFormValues) => {
         formData.append('file', file);
 
         const uploadResponse = await fetch(
-          `${API_BASE_URL}/api/community/posts/${postId}/images`,
+          `${API_BASE_URL}/community/posts/${postId}/images`,
           {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` },
@@ -229,7 +230,7 @@ const handleCreatePost = async (values: CreatePostFormValues) => {
 };
 
 const handlePreview = (imgUrl: string, title: string) => {
-  setPreviewImage(`${API_BASE_URL}/${imgUrl}`);
+  setPreviewImage(`${API_BASE_URL.replace('/api', '')}/${imgUrl}`);
   setPreviewTitle(title);
   setPreviewVisible(true);
 };
@@ -261,7 +262,7 @@ const handleDeletePostImageInEdit = async (
 
         // 调用删除图片接口
         const response = await fetch(
-          `${API_BASE_URL}/api/community/posts/${postId}/images/${imageId}`,
+          `${API_BASE_URL}/community/posts/${postId}/images/${imageId}`,
           {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
@@ -312,7 +313,7 @@ const fetchPostDetail = async (postId: number) => {
     ? { Authorization: `Bearer ${token}` }
     : {};
     // 1. 请求帖子详情
-    const response = await fetch(`${API_BASE_URL}/api/community/posts/${postId}`, { headers });
+    const response = await fetch(`${API_BASE_URL}/community/posts/${postId}`, { headers });
     const data = await response.json();
 
     // 2. 处理返回数据，保证 images 数组存在
@@ -380,7 +381,7 @@ const handleUpdatePost = async (values: CreatePostFormValues) => {
     }
 
     // 2. 更新帖子文本内容
-    const updateResponse = await fetch(`${API_BASE_URL}/api/community/posts/${editingPost.id}`, {
+    const updateResponse = await fetch(`${API_BASE_URL}/community/posts/${editingPost.id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -401,7 +402,7 @@ const handleUpdatePost = async (values: CreatePostFormValues) => {
           const formData = new FormData();
           formData.append('file', file);
 
-          return fetch(`${API_BASE_URL}/api/community/posts/${editingPost.id}/images`, {
+          return fetch(`${API_BASE_URL}/community/posts/${editingPost.id}/images`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` },
             body: formData
@@ -469,7 +470,7 @@ const deletePost = async (postId: number) => {
     }
 
     //调用删除接口
-    const response = await fetch(`${API_BASE_URL}/api/community/posts/${postId}`, {
+    const response = await fetch(`${API_BASE_URL}/community/posts/${postId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}` // 添加认证头
@@ -506,7 +507,7 @@ const fetchComments = async (postId: number, page: number = 1) => {
   try {
     // 1) 请求评论分页数据
     const response = await fetch(
-      `${API_BASE_URL}/api/community/posts/${postId}/comments?page=${page}&size=10`
+      `${API_BASE_URL}/community/posts/${postId}/comments?page=${page}&size=10`
     );
     const data = await response.json();
 
@@ -531,7 +532,7 @@ const fetchComments = async (postId: number, page: number = 1) => {
 
     try {
       const batchStatusResponse = await fetch(
-        `${API_BASE_URL}/api/community/comments/like/status/batch?comment_ids=${commentIds}`,
+        `${API_BASE_URL}/community/comments/like/status/batch?comment_ids=${commentIds}`,
         {
           headers: token ? { 'Authorization': `Bearer ${token}` } : {}
         }
@@ -585,7 +586,7 @@ const loadMoreComments = async () => {
 
   try {
     const res = await fetch(
-      `${API_BASE_URL}/api/community/posts/${currentPostId}/comments?page=${nextPage}&size=10`
+      `${API_BASE_URL}/community/posts/${currentPostId}/comments?page=${nextPage}&size=10`
     );
     const data = await res.json();
 
@@ -620,7 +621,7 @@ const handleSubmitComment = async () => {
     }
 
     // 创建评论
-    const commentRes = await fetch(`${API_BASE_URL}/api/community/posts/${currentPostId}/comments`, {
+    const commentRes = await fetch(`${API_BASE_URL}/community/posts/${currentPostId}/comments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -645,7 +646,7 @@ const handleSubmitComment = async () => {
         formData.append('file', imageFile);
 
         const uploadRes = await fetch(
-          `${API_BASE_URL}/api/community/comments/${newComment.id}/images`,
+          `${API_BASE_URL}/community/comments/${newComment.id}/images`,
           {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` },
@@ -693,7 +694,7 @@ const deleteComment = async (commentId: number) => {
     }
 
     // 调用删除评论接口
-    const response = await fetch(`${API_BASE_URL}/api/community/comments/${commentId}`, {
+    const response = await fetch(`${API_BASE_URL}/community/comments/${commentId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` },
     });
@@ -739,7 +740,7 @@ const handleLike = async (postId: number) => {
       return;
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/community/posts/${postId}/like`, {
+    const response = await fetch(`${API_BASE_URL}/community/posts/${postId}/like`, {
       method,
       headers: { 'Authorization': `Bearer ${token}` },
     });
@@ -790,7 +791,7 @@ const handleLikeComment = async (commentId: number) => {
       return;
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/community/comments/${commentId}/like`, {
+    const response = await fetch(`${API_BASE_URL}/community/comments/${commentId}/like`, {
       method,
       headers: { 'Authorization': `Bearer ${token}` },
     });
@@ -985,7 +986,7 @@ const handleShare = (postId: number) => console.log('分享帖子:', postId);
                     {editingPost.images_with_id.map((img, index) => (
                         <Col key={img.id} xs={8} style={{position: 'relative'}}>
                           <img
-                              src={`${API_BASE_URL}/${img.file_path}`}
+                              src={`${API_BASE_URL.replace('/api', '')}/${img.file_path}`}
                               alt={`现有图片 ${index + 1}`}
                               style={{
                                 width: '100%',
@@ -1367,7 +1368,7 @@ const handleShare = (postId: number) => console.log('分享帖子:', postId);
                                 {post.images?.map((imgUrl, index) => (
                                     <Col key={index} xs={8}>
                                       <img
-                                          src={`${API_BASE_URL}/${imgUrl}`}
+                                          src={`${API_BASE_URL.replace('/api', '')}/${imgUrl}`}
                                           alt={`帖子图片 ${index + 1}`}
                                           style={{
                                             width: '100%',
@@ -1378,7 +1379,7 @@ const handleShare = (postId: number) => console.log('分享帖子:', postId);
                                           }}
                                           // 修复这里：使用新的预览方式
                                           onClick={() => {
-                                            setPreviewImage(`${API_BASE_URL}/${imgUrl}`);
+                                            setPreviewImage(`${API_BASE_URL.replace('/api', '')}/${imgUrl}`);
                                             setPreviewVisible(true);
                                           }}
                                       />
